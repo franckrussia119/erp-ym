@@ -1,0 +1,195 @@
+import prisma from "../lib/prismaClient";
+
+// Mappage des rôles et des modules autorisés
+export const ROLES_PERMISSIONS: { [key: string]: string[] } = {
+  super_admin: ["admin", "clients", "dossiers", "taches", "facturation", "stock", "comptabilite", "achats", "analytics", "rh"],
+  pdg: ["admin", "clients", "dossiers", "taches", "facturation", "stock", "comptabilite", "achats", "analytics", "bons"],
+  dg: ["admin", "clients", "dossiers", "taches", "facturation", "stock", "comptabilite", "achats", "analytics", "bons"],
+  dga: ["admin", "clients", "dossiers", "taches", "facturation", "stock", "comptabilite", "achats", "analytics", "bons"],
+  daf: ["clients", "dossiers", "taches", "facturation", "comptabilite", "analytics", "bons"],
+  auditeur1: ["clients", "dossiers", "taches", "facturation", "comptabilite", "analytics", "bons"],
+  auditeur2: ["clients", "dossiers", "taches", "analytics", "bons"],
+  secretariat: ["dashboard", "dossiers", "clients", "taches"],
+  secretaire: ["dashboard", "dossiers", "clients", "taches"],
+  validation: ["dashboard", "dossiers", "taches"],
+  validation_role: ["dashboard", "dossiers", "taches"],
+  guce: ["dashboard", "dossiers", "taches"],
+  acconage: ["dashboard", "dossiers", "bons", "taches"],
+  enlevement: ["dashboard", "dossiers", "bons", "taches"],
+  facturation: ["dashboard", "documents", "facturation", "dossiers", "clients", "taches"],
+  fiscalite: ["dashboard", "dossiers", "taches", "analytics"],
+  cloture: ["dashboard", "dossiers", "taches"],
+  agent_payeur: ["dashboard", "bons", "dossiers", "taches", "comptabilite"],
+  caisse: ["dashboard", "bons", "dossiers", "taches", "comptabilite"],
+  analyste: ["dashboard", "analytics", "dossiers", "taches"],
+  comptable: ["clients", "facturation", "stock", "comptabilite", "achats", "analytics", "dossiers", "taches"],
+  commercial: ["clients", "dossiers", "taches", "facturation", "analytics"],
+  operationnel: ["clients", "dossiers", "taches"],
+  magasinier: ["stock", "achats", "dossiers", "taches"],
+  rh: ["rh", "taches"],
+  lecture: ["clients", "dossiers", "taches", "facturation", "stock", "comptabilite", "achats", "analytics"],
+  finances: ["dashboard", "documents", "facturation", "dossiers", "clients", "taches"],
+  comptable_ops: ["dashboard", "documents", "facturation", "dossiers", "accounting", "comptabilite", "reports", "taches"]
+};
+
+// Middleware d'authentification obligatoire et de contrôle d'accès global (RBAC)
+export const requireAuth = async (req: any, res: any, next: any) => {
+  if (!req.session || !req.session.userId) {
+    return res.redirect("/login");
+  }
+
+  try {
+    // Récupérer l'utilisateur frais de la DB pour être sûr de son état
+    const user = await prisma.user.findUnique({
+      where: { id: req.session.userId }
+    });
+
+    if (!user) {
+      req.session.destroy(() => {
+        res.redirect("/login");
+      });
+      return;
+    }
+
+    if (!user.actif) {
+      req.session.error_msg = "Votre compte a été désactivé par l'administrateur.";
+      req.session.destroy(() => {
+        res.redirect("/login");
+      });
+      return;
+    }
+
+    // Garder la session synchrone
+    req.session.user = user;
+    res.locals.user = user;
+
+    // Si changement de mot de passe forcé, rediriger vers le profil (sauf si on y est déjà ou qu'on se déconnecte)
+    // (les sous-routes /profile/password et /profile/update doivent rester accessibles, sinon le changement est impossible)
+    if (user.force_pwd_change && req.path !== "/profile" && !req.path.startsWith("/profile/") && req.path !== "/logout" && !req.path.startsWith("/api")) {
+      req.session.warning_msg = "Choisissez un nouveau mot de passe pour continuer.";
+      return res.redirect("/profile");
+    }
+
+    // Restriction globale pour le rôle "lecture" : interdire les requêtes de modification (POST, PATCH, DELETE, PUT)
+    if (user.role === "lecture" && req.method !== "GET" && !req.path.startsWith("/logout") && !req.path.startsWith("/profile")) {
+      return res.status(403).render("errors/403", {
+        message: "Action interdite : vous disposez uniquement d'un accès en lecture seule."
+      });
+    }
+
+    next();
+  } catch (error) {
+    console.error("[RBAC AUTH] Erreur :", error);
+    res.status(500).render("errors/500", { error });
+  }
+};
+
+// Middleware pour restreindre l'accès à un module donné
+export const requireModule = (moduleName: string | string[]) => {
+  return (req: any, res: any, next: any) => {
+    const user = req.session.user;
+    if (!user) {
+      return res.redirect("/login");
+    }
+
+    const userRole = (user.role || "").trim().toLowerCase();
+    const modulesToCheck = Array.isArray(moduleName) ? moduleName : [moduleName];
+
+    // To prevent root-mounted router middleware from running on unrelated routes
+    // (since routers are mounted at root '/' via app.use(router) in server.ts),
+    // we should only enforce module permissions if the request path actually matches
+    // the module's target paths.
+    let pathMatchesModule = false;
+    const path = req.path || "";
+
+    for (const mName of modulesToCheck) {
+      if (mName === "facturation") {
+        if (path.startsWith("/documents") || path.startsWith("/api/documents") || path.startsWith("/facturation")) pathMatchesModule = true;
+      } else if (mName === "stock") {
+        if (path.startsWith("/stock")) pathMatchesModule = true;
+      } else if (mName === "analytics") {
+        if (path.startsWith("/analytics")) pathMatchesModule = true;
+      } else if (mName === "comptabilite") {
+        if (path.startsWith("/accounting")) pathMatchesModule = true;
+      } else if (mName === "achats") {
+        if (path.startsWith("/fournisseurs") || path.startsWith("/commandes") || path.startsWith("/factures-fournisseur")) pathMatchesModule = true;
+      } else if (mName === "taches") {
+        if (path.startsWith("/taches") || path.startsWith("/subtasks")) pathMatchesModule = true;
+      } else if (mName === "dossiers") {
+        if (path.startsWith("/dossiers") || path.startsWith("/archives")) pathMatchesModule = true;
+      } else if (mName === "clients") {
+        if (path.startsWith("/clients") || path.startsWith("/api/clients")) pathMatchesModule = true;
+      }
+    }
+
+    if (!pathMatchesModule) {
+      return next();
+    }
+
+    // La discussion d'un dossier est ouverte à toute l'équipe, direction comprise (groupe du dossier)
+    if (/^\/dossiers\/\d+\/(comment|chat(\/(seen|\d+))?)$/.test(path)) {
+      return next();
+    }
+
+    // 1. Super admin can always perform any action
+    if (userRole === "super_admin") {
+      return next();
+    }
+
+    // 1.5. Secretariat can always write to clients, dossiers, and taches modules
+    if ((userRole === "secretariat" || userRole === "secretaire") && modulesToCheck.some(m => ["clients", "dossiers", "taches", "dashboard"].includes(m))) {
+      return next();
+    }
+
+    // 2. All other users can view (GET) any module/functionality of the system
+    if (req.method === "GET") {
+      return next();
+    }
+
+    // 3. For modifying requests (POST, PATCH, PUT, DELETE), enforce strict write permissions
+    const permittedModules = ROLES_PERMISSIONS[user.role] || ROLES_PERMISSIONS[userRole] || [];
+    
+    // Administration roles cannot perform general operational write tasks (like creating dossiers or creating bills),
+    // except if the specific route has explicit internal role checks (which we handle inside the route itself, e.g., approving a bon or signing).
+    const adminRoles = ["pdg", "dg", "dga", "daf", "auditeur1", "auditeur2"];
+    if (adminRoles.includes(userRole)) {
+      // Block creation/modification of dossiers/clients/facturation/comptabilite operational data.
+      // They are only allowed to modify "bons" or "taches".
+      const allowedWriteModules = ["bons", "taches"];
+      const containsNonAdminWriteModule = modulesToCheck.some(m => !allowedWriteModules.includes(m));
+      if (containsNonAdminWriteModule) {
+        console.warn(`[RBAC] Administration write action block for ${user.email} (Rôle: ${user.role}, Modules: ${modulesToCheck.join(",")})`);
+        return res.status(403).render("errors/403", {
+          message: `Accès refusé : En tant que membre de la Direction, vous pouvez visualiser toutes les données et valider les bons, mais vous ne pouvez pas créer ou modifier des fiches opérationnelles directement (ex: dossiers, clients, factures).`
+        });
+      }
+    }
+
+    const hasPermission = modulesToCheck.some(m => permittedModules.includes(m));
+    if (hasPermission) {
+      return next();
+    }
+
+    console.warn(`[RBAC] Accès refusé aux modules "${modulesToCheck.join(",")}" pour l'utilisateur ${user.email} (Rôle: ${user.role})`);
+    res.status(403).render("errors/403", {
+      message: `Vous n'avez pas l'autorisation d'accéder aux modules : ${modulesToCheck.map(m => m.toUpperCase()).join(", ")}`
+    });
+  };
+};
+
+// Middleware spécifique pour le rôle super_admin
+export const requireSuperAdmin = (req: any, res: any, next: any) => {
+  const user = req.session.user;
+  if (!user) {
+    return res.redirect("/login");
+  }
+
+  if (user.role === "super_admin") {
+    return next();
+  }
+
+  console.warn(`[RBAC] Accès super_admin refusé pour l'utilisateur ${user.email} (Rôle: ${user.role})`);
+  res.status(403).render("errors/403", {
+    message: "Cet espace est strictement réservé aux Super Administrateurs."
+  });
+};

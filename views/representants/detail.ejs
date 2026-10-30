@@ -1,0 +1,368 @@
+<%- include('../partials/header') %>
+
+<div class="row mb-4 align-items-center">
+  <div class="col-md-6 col-sm-12">
+    <div class="d-flex align-items-center">
+      <a href="/representants" class="btn btn-light btn-sm rounded-circle me-3">
+        <i class="bi bi-arrow-left fs-5"></i>
+      </a>
+      <div>
+        <h1 class="h3 text-slate-800 mb-0"><%= rep.nom %> <%= rep.prenom || "" %></h1>
+        <p class="text-muted mb-0">Fiche détaillée du représentant légal</p>
+      </div>
+    </div>
+  </div>
+  <div class="col-md-6 col-sm-12 text-md-end mt-3 mt-md-0">
+    <div class="d-inline-flex gap-2">
+      <a href="/comptes/representant/<%= rep.id %>" class="btn btn-light d-inline-flex align-items-center"><i class="bi bi-person-lines-fill me-1"></i>Relevé de compte</a>
+      <a href="/representants/<%= rep.id %>/edit" class="btn btn-outline-primary d-inline-flex align-items-center">
+        <i class="bi bi-pencil-square me-2"></i> Modifier les informations
+      </a>
+      <button onclick="toggleRepStatus(<%= rep.id %>)" class="btn <%= rep.actif ? 'btn-outline-danger' : 'btn-success' %> d-inline-flex align-items-center">
+        <i class="bi bi-power me-2"></i> <%= rep.actif ? 'Désactiver' : 'Activer' %>
+      </button>
+    </div>
+  </div>
+</div>
+
+
+<div class="row g-4">
+  <!-- Colonne Gauche : Infos & Documents -->
+  <div class="col-lg-4 col-md-12">
+    <!-- Profil Card -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-body text-center py-4">
+        <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-3" style="width: 80px; height: 80px; font-size: 2rem;">
+          <%= rep.nom.charAt(0) %><%= rep.prenom ? rep.prenom.charAt(0) : '' %>
+        </div>
+        <h4 class="fw-bold mb-1 text-dark"><%= rep.nom %> <%= rep.prenom || "" %></h4>
+        <span class="badge bg-secondary-subtle text-secondary px-3 py-1 mb-3"><%= rep.fonction || "Représentant" %></span>
+        
+        <div class="text-start border-top pt-3 mt-2">
+          <div class="mb-2 d-flex justify-content-between">
+            <span class="text-muted small">ID Représentant:</span>
+            <span class="font-monospace fw-bold text-dark">REP-<%= rep.id %></span>
+          </div>
+          <div class="mb-2 d-flex justify-content-between">
+            <span class="text-muted small">Statut de l'accès:</span>
+            <span class="badge <%= rep.actif ? 'bg-success' : 'bg-danger' %>"><%= rep.actif ? 'Actif' : 'Désactivé' %></span>
+          </div>
+          <div class="mb-2">
+            <span class="text-muted small d-block">Téléphone:</span>
+            <a href="tel:<%= rep.tel %>" class="text-dark text-decoration-none fw-semibold"><i class="bi bi-telephone text-primary me-2"></i><%= rep.tel || 'Non renseigné' %></a>
+          </div>
+          <div class="mb-2">
+            <span class="text-muted small d-block">Email:</span>
+            <% if (rep.email) { %>
+              <a href="mailto:<%= rep.email %>" class="text-dark text-decoration-none fw-semibold"><i class="bi bi-envelope text-primary me-2"></i><%= rep.email %></a>
+            <% } else { %>
+              <span class="text-muted"><i class="bi bi-envelope me-2"></i>Non renseigné</span>
+            <% } %>
+          </div>
+          <div class="mb-0">
+            <span class="text-muted small d-block">Numéro CNI:</span>
+            <span class="fw-semibold text-dark"><i class="bi bi-card-text text-primary me-2"></i><%= rep.cni_numero || 'Non renseigné' %></span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Documents Card -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 pt-3 pb-2">
+        <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-file-earmark-lock-fill text-primary me-2"></i>Pièces Justificatives</h5>
+      </div>
+      <div class="card-body">
+        <% 
+          const cniDoc = rep.documents.find(d => d.category === 'CNI_REP');
+          const procuDoc = rep.documents.find(d => d.category === 'PROCU_REP');
+        %>
+
+        <!-- CNI Row -->
+        <div class="p-3 border rounded mb-3 bg-light-subtle">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-file-earmark-person-fill text-primary fs-3 me-3"></i>
+              <div>
+                <div class="fw-bold text-dark" style="font-size: 0.95rem;">Carte d'Identité (CNI)</div>
+                <small class="text-muted">
+                  <% if (cniDoc) { %>
+                    <%= cniDoc.original %>
+                  <% } else { %>
+                    Aucun fichier téléversé
+                  <% } %>
+                </small>
+              </div>
+            </div>
+            <% if (cniDoc) { %>
+              <a href="<%= cniDoc.path %>" target="_blank" class="btn btn-primary btn-sm d-inline-flex align-items-center">
+                <i class="bi bi-download"></i>
+              </a>
+            <% } else { %>
+              <span class="badge bg-warning-subtle text-warning">Manquant</span>
+            <% } %>
+          </div>
+        </div>
+
+        <!-- Procuration Row -->
+        <div class="p-3 border rounded bg-light-subtle">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center">
+              <i class="bi bi-file-earmark-text-fill text-primary fs-3 me-3"></i>
+              <div>
+                <div class="fw-bold text-dark" style="font-size: 0.95rem;">Procuration / Mandat</div>
+                <small class="text-muted">
+                  <% if (procuDoc) { %>
+                    <%= procuDoc.original %>
+                  <% } else { %>
+                    Aucun fichier téléversé
+                  <% } %>
+                </small>
+              </div>
+            </div>
+            <% if (procuDoc) { %>
+              <a href="<%= procuDoc.path %>" target="_blank" class="btn btn-primary btn-sm d-inline-flex align-items-center">
+                <i class="bi bi-download"></i>
+              </a>
+            <% } else { %>
+              <span class="badge bg-warning-subtle text-warning">Manquant</span>
+            <% } %>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Colonne Droite : Clients Liés & Dossiers Gérés -->
+  <div class="col-lg-8 col-md-12">
+    <!-- Clients Associés -->
+    <div class="card border-0 shadow-sm mb-4">
+      <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3 pb-2">
+        <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-people-fill text-primary me-2"></i>Importateurs / Exportateurs Associés</h5>
+        <button class="btn btn-sm btn-primary d-inline-flex align-items-center" data-bs-toggle="collapse" data-bs-target="#linkClientFormBox">
+          <i class="bi bi-plus-circle me-1"></i> Associer un Client
+        </button>
+      </div>
+      <div class="card-body">
+        
+        <!-- Live-linking search tool (AJAX Form) -->
+        <div class="collapse mb-3" id="linkClientFormBox">
+          <div class="card bg-light border-0">
+            <div class="card-body p-3">
+              <h6 class="fw-bold mb-2 text-dark small">Lier un nouvel importateur/exportateur :</h6>
+              <div class="row g-2">
+                <div class="col-md-9">
+                  <select id="linkClientIdSelect" class="form-select form-select-sm">
+                    <option value="">-- Choisir un client dans l'annuaire --</option>
+                    <% if (allClients && allClients.length > 0) { %>
+                      <% 
+                        // Filter out already linked clients
+                        const linkedIds = rep.client_representants.map(cr => cr.client_id);
+                        allClients.forEach(cl => { 
+                          if (!linkedIds.includes(cl.id)) {
+                      %>
+                        <option value="<%= cl.id %>"><%= cl.nom %> (CLI-<%= cl.id %>)</option>
+                      <% 
+                          }
+                        }); 
+                      %>
+                    <% } %>
+                  </select>
+                </div>
+                <div class="col-md-3">
+                  <button onclick="linkClientToRep()" class="btn btn-primary btn-sm w-100 d-inline-flex align-items-center justify-content-center">
+                    <i class="bi bi-link-45deg me-1"></i> Valider la liaison
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+            <thead class="table-light">
+              <tr>
+                <th>Code Client</th>
+                <th>Raison Sociale / Nom</th>
+                <th>Identifiant Unique (N.I.U)</th>
+                <th>Type d'Association</th>
+                <th class="text-end pe-3">Liaison</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (rep.client_representants && rep.client_representants.length > 0) { %>
+                <% rep.client_representants.forEach(cr => { %>
+                  <tr id="link-row-<%= cr.client_id %>">
+                    <td class="font-monospace text-muted">CLI-<%= cr.client.id %></td>
+                    <td class="fw-bold text-dark"><%= cr.client.nom %></td>
+                    <td><span class="font-monospace text-xs badge bg-light text-dark border"><%= cr.client.niu || 'N/A' %></span></td>
+                    <td>
+                      <% if (cr.est_principal) { %>
+                        <span class="badge bg-primary">Représentant Principal</span>
+                      <% } else { %>
+                        <span class="badge bg-light text-secondary border">Mandataire secondaire</span>
+                      <% } %>
+                    </td>
+                    <td class="text-end pe-3">
+                      <button onclick="unlinkClientFromRep(<%= cr.client_id %>)" class="btn btn-outline-danger btn-sm rounded-pill px-3" title="Délier ce client">
+                        <i class="bi bi-trash-fill me-1"></i> Délier
+                      </button>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted italic small">
+                    <i class="bi bi-link-45deg fs-2 d-block mb-2 text-secondary"></i>
+                    Aucun importateur/exportateur lié à ce représentant pour le moment.
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Dossiers Gérés -->
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 pt-3 pb-2">
+        <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-folder2-open text-primary me-2"></i>Dossiers de Transit Gérés</h5>
+      </div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+            <thead class="table-light">
+              <tr>
+                <th>Référence</th>
+                <th>Client Mandataire</th>
+                <th>Type de Transit</th>
+                <th>Bureau de Douane</th>
+                <th>Statut</th>
+                <th class="text-end pe-3">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (rep.dossiers && rep.dossiers.length > 0) { %>
+                <% rep.dossiers.forEach(dos => { %>
+                  <tr>
+                    <td class="fw-bold font-monospace text-primary"><%= dos.ref_dossier %></td>
+                    <td><%= dos.client.nom %></td>
+                    <td>
+                      <span class="badge <%= dos.type_transit === 'IMPORT' ? 'badge-import' : 'badge-export' %>">
+                        <%= dos.type_transit %>
+                      </span>
+                    </td>
+                    <td><span class="text-muted"><%= dos.bureau_douane || 'Douala Port' %></span></td>
+                    <td>
+                      <span class="badge bg-secondary-subtle text-secondary"><%= dos.statut %></span>
+                    </td>
+                    <td class="text-end pe-3">
+                      <a href="/dossiers/<%= dos.id %>" class="btn btn-light btn-sm text-primary rounded-circle">
+                        <i class="bi bi-eye-fill"></i>
+                      </a>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr>
+                  <td colspan="6" class="text-center py-4 text-muted italic small">
+                    Aucun dossier de transit n'a encore été traité par ce représentant.
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function linkClientToRep() {
+  const select = document.getElementById("linkClientIdSelect");
+  const clientId = select.value;
+  if (!clientId) {
+    alert("Veuillez sélectionner un client dans la liste.");
+    return;
+  }
+
+  fetch(`/representants/<%= rep.id %>/link-client`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ client_id: clientId })
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.ok) {
+      window.location.reload();
+    } else {
+      alert("Erreur lors de la liaison : " + (data.error || ""));
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Erreur réseau.");
+  });
+}
+
+function unlinkClientFromRep(clientId) {
+  if (confirm("Êtes-vous sûr de vouloir rompre la liaison avec cet importateur/exportateur ?")) {
+    fetch(`/representants/<%= rep.id %>/unlink-client`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ client_id: clientId })
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        window.location.reload();
+      } else {
+        alert("Erreur lors de la suppression de liaison : " + (data.error || ""));
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Erreur de communication avec le serveur.");
+    });
+  }
+}
+
+function toggleRepStatus(id) {
+  const currentActif = <%= rep.actif %>;
+  const msg = currentActif 
+    ? "Désactiver ce représentant ? Il n'apparaîtra plus dans l'annuaire actif." 
+    : "Réactiver ce représentant ?";
+    
+  if (confirm(msg)) {
+    fetch(`/representants/${id}/toggle`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        window.location.reload();
+      } else {
+        alert("Erreur: " + (data.error || ""));
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Erreur réseau.");
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>

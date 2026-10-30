@@ -1,0 +1,177 @@
+<%- include('../partials/header') %>
+<%
+  const ini = (u) => ((u.prenom || '')[0] || '') + (u.nom || '?')[0];
+  const full = (u) => [u.nom, u.prenom].filter(Boolean).join(' ');
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-diagram-3"></i></span>
+  <div class="flex-grow-1">
+    <h1>Services</h1>
+    <p class="mb-0">Les services de l'entreprise. Chaque dépense, bon et facture est rattaché à un service pour connaître son résultat.</p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/rapports/services"><i class="bi bi-graph-up me-1"></i>Résultat par service</a>
+    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#svcNew"><i class="bi bi-plus-lg me-1"></i>Nouveau service</button>
+  </div>
+</div>
+
+<% if (sansService.length) { %>
+  <div class="alert alert-warning d-flex gap-2 align-items-start">
+    <i class="bi bi-person-exclamation fs-5"></i>
+    <div><b><%= sansService.length %> employé<%= sansService.length > 1 ? 's' : '' %> sans service :</b> <%= sansService.slice(0, 8).map(full).join(', ') %><%= sansService.length > 8 ? '…' : '' %>.
+    Rangez-les avec « Ajouter un employé à ce service ».</div>
+  </div>
+<% } %>
+
+<div class="svc-grid">
+  <% services.forEach(s => { %>
+    <div class="svc-card <%= s.actif ? '' : 'off' %>" id="svc-card-<%= s.id %>" style="--d: <%= s.couleur %>">
+      <div class="svc-top">
+        <span class="svc-ico"><i class="bi <%= s.icone %>"></i></span>
+        <div class="flex-grow-1 min-w-0">
+          <h3><%= s.nom %><% if (!s.actif) { %> <span class="badge text-bg-light border">désactivé</span><% } %></h3>
+          <div class="svc-code"><%= s.code %></div>
+        </div>
+        <button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#svc<%= s.id %>"><i class="bi bi-pencil me-1"></i>Modifier</button>
+      </div>
+      <% if (s.description) { %><p class="svc-desc"><%= s.description %></p><% } %>
+      <div class="svc-resp"><i class="bi bi-person-badge"></i><span class="flex-grow-1 min-w-0"><%= s.responsable ? 'Responsable : ' + full(s.responsable) : 'Pas de responsable' %></span>
+        <% if (s.actif) { %><button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="modal" data-bs-target="#svcPick" data-svc="<%= s.id %>" data-svc-nom="<%= s.nom %>" data-resp="<%= s.responsable_id || '' %>" data-mode="responsable"><%= s.responsable ? 'Changer' : 'Choisir' %></button><% } %></div>
+      <div class="svc-members">
+        <% s.membres.slice(0, 9).forEach(m => { %><span class="svc-av" title="<%= full(m) %>"><%= ini(m) %></span><% }) %>
+        <% if (s.membres.length > 9) { %><span class="svc-av more">+<%= s.membres.length - 9 %></span><% } %>
+        <span class="svc-count"><%= s.membres.length %> membre<%= s.membres.length > 1 ? 's' : '' %></span>
+      </div>
+      <% if (s.actif) { %><button type="button" class="svc-add" data-bs-toggle="modal" data-bs-target="#svcPick" data-svc="<%= s.id %>" data-svc-nom="<%= s.nom %>" data-resp="<%= s.responsable_id || '' %>" data-mode="membre"><i class="bi bi-person-plus"></i>Ajouter un employé à ce service</button><% } %>
+    </div>
+
+    <div class="modal fade" id="svc<%= s.id %>" tabindex="-1">
+      <div class="modal-dialog modal-dialog-scrollable"><form class="modal-content" method="POST" action="/admin/services/<%= s.id %>">
+        <div class="modal-header"><h5 class="modal-title">Modifier « <%= s.nom %> »</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+        <div class="modal-body">
+          <%- include('_service_fields', { s, users, icons, roleLabel }) %>
+          <label class="form-label fw-semibold mt-3">Membres</label>
+          <input type="hidden" name="membres_sent" value="1">
+          <input type="search" class="form-control form-control-sm mb-2" placeholder="Rechercher un employé" data-svc-filter>
+          <div class="svc-pick">
+            <% users.forEach(u => { const other = u.departement_id && u.departement_id !== s.id; %>
+              <label class="svc-pick-row" data-name="<%= full(u).toLowerCase() %>">
+                <input type="checkbox" class="form-check-input" name="membres" value="<%= u.id %>" <%= u.departement_id === s.id ? 'checked' : '' %>>
+                <span><%= full(u) %></span>
+                <% if (other) { const o = services.find(x => x.id === u.departement_id); %><small class="text-muted ms-auto">dans <%= o ? o.nom : 'un autre service' %></small><% } %>
+              </label>
+            <% }) %>
+          </div>
+          <div class="form-text">Cocher un employé d'un autre service le déplace ici.</div>
+          <div class="form-check form-switch mt-3">
+            <input type="hidden" name="actif" value="0">
+            <input class="form-check-input" type="checkbox" name="actif" value="1" id="act<%= s.id %>" <%= s.actif ? 'checked' : '' %>>
+            <label class="form-check-label" for="act<%= s.id %>">Service actif</label>
+          </div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary">Enregistrer</button></div>
+      </form></div>
+    </div>
+  <% }) %>
+</div>
+
+<div class="modal fade" id="svcNew" tabindex="-1">
+  <div class="modal-dialog"><form class="modal-content" method="POST" action="/admin/services">
+    <div class="modal-header"><h5 class="modal-title">Nouveau service</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body"><%- include('_service_fields', { s: null, users, icons, roleLabel }) %></div>
+    <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary">Créer</button></div>
+  </form></div>
+</div>
+
+<div class="modal fade" id="svcPick" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable"><form class="modal-content" method="POST" id="svcPickForm" action="">
+    <div class="modal-header"><h5 class="modal-title"><i class="bi bi-people me-2"></i><span id="svcPickTitre">Employés</span> · <span id="svcPickNom"></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+    <div class="modal-body">
+      <input type="search" class="form-control mb-2" id="svcPickQ" placeholder="Rechercher par nom, rôle ou service" autocomplete="off">
+      <div class="emp-list" id="svcPickList">
+        <% users.forEach(u => { const o = u.departement_id ? services.find(x => x.id === u.departement_id) : null; %>
+          <div class="emp-row" data-id="<%= u.id %>" data-dept="<%= u.departement_id || '' %>" data-q="<%= (full(u) + ' ' + roleLabel(u.role) + ' ' + (o ? o.nom : 'sans service')).toLowerCase() %>">
+            <span class="emp-av"><%= ini(u) %></span>
+            <div class="flex-grow-1 min-w-0"><div class="emp-nom"><%= full(u) %></div><small class="text-muted"><%= roleLabel(u.role) %> · <%= o ? o.nom : 'sans service' %></small></div>
+            <span class="emp-tag" data-tag hidden></span>
+            <button class="btn btn-sm btn-light" name="pick" value="membre:<%= u.id %>" data-act="membre">Ajouter</button>
+            <button class="btn btn-sm btn-outline-success" name="pick" value="responsable:<%= u.id %>" data-act="responsable" title="Nommer responsable du service">Responsable</button>
+          </div>
+        <% }) %>
+        <div class="text-muted small text-center py-3" id="svcPickVide" hidden>Aucun employé ne correspond.</div>
+      </div>
+      <div class="form-text mt-2">« Ajouter » déplace l'employé dans ce service. « Responsable » le nomme chef du service : il valide la première étape des congés et absences de ses membres.</div>
+    </div>
+    <div class="modal-footer justify-content-between">
+      <small class="text-muted">La personne n'a pas encore de compte ? <% if (isSuperAdmin) { %><a href="/admin/users/create" id="svcPickCreer">Créer le compte dans Utilisateurs</a><% } else { %>Le super admin la crée dans Administration › Utilisateurs.<% } %></small>
+      <button type="button" class="btn btn-light" data-bs-dismiss="modal">Fermer</button>
+    </div>
+  </form></div>
+</div>
+
+<script>
+  (function () {
+    var modal = document.getElementById('svcPick'), q = document.getElementById('svcPickQ'), list = document.getElementById('svcPickList');
+    var rows = Array.prototype.slice.call(list.querySelectorAll('.emp-row'));
+    function filtre() {
+      var v = q.value.trim().toLowerCase(), n = 0;
+      rows.forEach(function (r) { r.hidden = !!v && r.dataset.q.indexOf(v) < 0; if (!r.hidden) n++; });
+      document.getElementById('svcPickVide').hidden = n > 0;
+    }
+    q.addEventListener('input', filtre);
+    modal.addEventListener('show.bs.modal', function (e) {
+      var t = e.relatedTarget; if (!t) return;
+      var svc = t.dataset.svc, resp = t.dataset.resp, mode = t.dataset.mode;
+      document.getElementById('svcPickForm').action = '/admin/services/' + svc + '/membres';
+      document.getElementById('svcPickNom').textContent = t.dataset.svcNom;
+      document.getElementById('svcPickTitre').textContent = mode === 'responsable' ? 'Choisir le responsable' : 'Ajouter un employé';
+      var creer = document.getElementById('svcPickCreer'); if (creer) creer.href = '/admin/users/create?departement_id=' + svc;
+      rows.forEach(function (r) {
+        var membre = r.dataset.dept === svc, chef = r.dataset.id === resp;
+        var b = r.querySelector('[data-act=membre]'), c = r.querySelector('[data-act=responsable]'), tag = r.querySelector('[data-tag]');
+        b.value = (membre ? 'retirer:' : 'membre:') + r.dataset.id; b.textContent = membre ? 'Retirer' : 'Ajouter';
+        b.className = 'btn btn-sm ' + (membre ? 'btn-outline-danger' : 'btn-light');
+        b.hidden = mode === 'responsable';
+        c.disabled = chef;
+        tag.hidden = !(membre || chef); tag.textContent = chef ? 'responsable' : 'membre';
+        r.style.order = chef ? 0 : membre ? 1 : 2;
+      });
+      q.value = ''; filtre();
+    });
+    modal.addEventListener('shown.bs.modal', function () { q.focus(); });
+  })();
+  // Responsable : liste de tous les employés, filtrée pendant la saisie
+  document.querySelectorAll('.emp-combo').forEach(function (box) {
+    var inp = box.querySelector('[data-emp-combo]'), hid = box.querySelector('input[type=hidden]'), drop = box.querySelector('.emp-drop');
+    var opts = Array.prototype.slice.call(drop.querySelectorAll('.emp-opt'));
+    function montrer() {
+      var v = inp.value.trim().toLowerCase();
+      if (hid.value && opts.some(function (o) { return o.dataset.id === hid.value && o.dataset.label.toLowerCase() === v; })) v = '';
+      opts.forEach(function (o) { o.hidden = !!v && o.textContent.toLowerCase().indexOf(v) < 0; });
+      drop.hidden = false;
+    }
+    inp.addEventListener('focus', montrer);
+    inp.addEventListener('input', function () { if (!inp.value.trim()) hid.value = ''; montrer(); });
+    opts.forEach(function (o) {
+      o.addEventListener('mousedown', function (e) { e.preventDefault(); hid.value = o.dataset.id; inp.value = o.dataset.label; drop.hidden = true; });
+    });
+    inp.addEventListener('blur', function () {
+      drop.hidden = true;
+      var o = opts.find(function (x) { return x.dataset.id === hid.value; });
+      inp.value = o ? o.dataset.label : '';
+    });
+    inp.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      var o = opts.find(function (x) { return !x.hidden && x.dataset.id; });
+      if (o) { hid.value = o.dataset.id; inp.value = o.dataset.label; drop.hidden = true; }
+    });
+  });
+  document.querySelectorAll('[data-svc-filter]').forEach((inp) => {
+    inp.addEventListener('input', () => {
+      const q = inp.value.trim().toLowerCase();
+      inp.nextElementSibling.querySelectorAll('.svc-pick-row').forEach((r) => { r.hidden = q && !r.dataset.name.includes(q); });
+    });
+  });
+</script>
+<%- include('../partials/footer') %>

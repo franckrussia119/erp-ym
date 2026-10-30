@@ -1,0 +1,34 @@
+<%
+  // Formulaire de bon réel : lignes du bon provisoire verrouillées + montant réel en face, nouvelles lignes pour l'imprévu.
+  const fm = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+%>
+<form action="<%= action %>" method="POST" enctype="multipart/form-data" class="reel-form" data-reel-form data-prov="<%= bp.montant_demande %>">
+  <input type="hidden" name="bon_provisoir_id" value="<%= bp.id %>">
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-1 cmp-table">
+      <thead><tr><th>Désignation</th><th class="text-end">Prévu</th><th class="text-end" style="width:9.5rem">Réel (F)</th><th class="text-end">Écart</th><th style="width:2.5rem"></th></tr></thead>
+      <tbody>
+        <% items.forEach((it, i) => { %>
+          <tr data-prov-line data-prevu="<%= it.montant || 0 %>">
+            <td><div class="reel-des"><span><i class="bi bi-lock-fill text-muted me-1 small" title="Ligne du bon provisoire"></i><%= it.designation %></span><label class="reel-recu" title="Joindre le reçu de cette dépense"><input type="file" name="recu_p_<%= i %>" accept=".pdf,image/*" multiple capture="environment" hidden data-recu><i class="bi bi-paperclip"></i><span data-recu-label>Reçu</span></label></div></td>
+            <td class="text-end text-muted"><%= fm(it.montant) %></td>
+            <td><input type="number" min="0" step="any" name="reel" class="form-control form-control-sm text-end" value="<%= it.montant || 0 %>" required data-amt></td>
+            <td class="text-end" data-ecart>0</td><td></td>
+          </tr>
+        <% }) %>
+      </tbody>
+      <tbody data-new-lines></tbody>
+      <tfoot>
+        <tr class="fw-bold"><td>Total</td><td class="text-end"><%= fm(bp.montant_demande) %></td><td class="text-end"><span data-total>0</span></td><td class="text-end" data-ecart-total>0</td><td></td></tr>
+      </tfoot>
+    </table>
+  </div>
+  <div class="small mb-2" data-ecart-msg></div>
+  <button type="button" class="btn btn-light btn-sm mb-3" data-add-new><i class="bi bi-plus-lg me-1"></i>Ajouter une dépense imprévue</button>
+  <div class="row g-2 ops-form">
+    <div class="col-md-6"><label class="form-label">Observations</label><input type="text" name="observations" class="form-control form-control-sm" placeholder="ex. Surestaries d'un jour payées au port"></div>
+    <div class="col-md-6"><label class="form-label">Autres reçus (PDF ou photos)</label><input type="file" name="fichiers_justificatifs" class="form-control form-control-sm" accept=".pdf,image/*" multiple data-recu-any></div>
+    <div class="col-12 small text-muted"><i class="bi bi-paperclip me-1"></i>Joignez le reçu de chaque dépense sur sa ligne (photo ou PDF). Au moins un reçu est obligatoire.</div>
+    <div class="col-12 text-end"><button type="submit" class="btn btn-primary px-4"><i class="bi bi-file-earmark-check me-1"></i>Enregistrer le bon réel</button></div>
+  </div>
+</form>

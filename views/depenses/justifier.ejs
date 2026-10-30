@@ -1,0 +1,14 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-receipt-cutoff"></i></span>
+  <div class="flex-grow-1">
+    <h1>Justifier <%= bp.numero %></h1>
+    <p class="mb-0"><% if (bp.dossier) { %><a href="/dossiers/<%= bp.dossier.id %>">Dossier <%= dossierTitle(bp.dossier) %></a><% } else { %><%= categorieLabel(bp.categorie) %><% } %> · <%= bp.objet %> · <%= Math.round(bp.montant_demande).toLocaleString('fr-FR') %> F reçus de la caisse</p>
+  </div>
+  <a href="/bons/<%= bp.id %>" class="btn btn-light"><i class="bi bi-arrow-left me-1"></i>Retour au bon</a>
+</div>
+<div class="card"><div class="card-body">
+  <p class="small text-muted">Les lignes de votre demande ne changent pas. Saisissez le montant réellement payé en face de chaque ligne et joignez les reçus. Une dépense imprévue s'ajoute en nouvelle ligne.</p>
+  <%- include('../bons/_reel_form', { bp, items, action: '/bons/reel' }) %>
+</div></div>
+<%- include('../partials/footer') %>

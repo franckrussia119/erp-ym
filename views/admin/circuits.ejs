@@ -1,0 +1,72 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-diagram-2"></i></span>
+  <div class="flex-grow-1">
+    <h1>Circuits d'approbation</h1>
+    <p class="mb-0">Pour chaque type de demande, qui valide et dans quel ordre. Une tranche de montant peut ajouter des étapes.</p>
+  </div>
+</div>
+
+<form method="POST" action="/admin/circuits" data-circuits>
+  <input type="hidden" name="regles_json" data-out>
+  <div class="ci-grid">
+    <% Object.entries(TYPES).forEach(([k, T]) => { const rs = regles.filter(r => r.type === k); %>
+      <div class="card ci-type" data-type="<%= k %>" style="--d: <%= T.couleur %>">
+        <div class="card-header d-flex align-items-center gap-2"><span class="dm-ico sm"><i class="bi <%= T.icon %>"></i></span><b><%= T.label %></b></div>
+        <div class="card-body">
+          <div data-rows>
+            <% (rs.length ? rs : [{ montant_min: 0, etapes: ['RESPONSABLE'] }]).forEach(r => { %>
+              <div class="ci-row" data-row>
+                <div class="ci-from">
+                  <% if (T.montant === 'non') { %><span class="small text-muted">Toujours</span><input type="hidden" data-min value="0">
+                  <% } else { %><label class="small text-muted">À partir de</label><div class="input-group input-group-sm"><input type="number" min="0" step="1000" class="form-control text-end" data-min value="<%= r.montant_min %>" <%= r.montant_min === 0 ? 'readonly' : '' %>><span class="input-group-text">F</span></div><% } %>
+                </div>
+                <div class="ci-steps" data-steps>
+                  <% r.etapes.forEach(e => { %><span class="ci-step" data-k="<%= e %>"><%= APPROBATEURS[e] %><button type="button" data-rm aria-label="Retirer">×</button></span><% }) %>
+                  <select class="form-select form-select-sm ci-add" data-add><option value="">+ étape</option><% Object.entries(APPROBATEURS).forEach(([a, l]) => { %><option value="<%= a %>"><%= l %></option><% }) %></select>
+                </div>
+                <% if (r.montant_min !== 0) { %><button type="button" class="btn btn-link text-danger btn-sm p-0" data-del-row aria-label="Supprimer la tranche"><i class="bi bi-trash"></i></button><% } %>
+              </div>
+            <% }) %>
+          </div>
+          <% if (T.montant !== 'non') { %><button type="button" class="btn btn-light btn-sm mt-2" data-add-row><i class="bi bi-plus-lg me-1"></i>Ajouter une tranche</button><% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+  <p class="small text-muted mt-3">« Responsable du service » est le responsable du service du demandeur (Administration › Services). S'il n'y en a pas, le DG prend l'étape. Personne ne valide sa propre demande : son étape est sautée.</p>
+  <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Enregistrer les circuits</button>
+</form>
+<script>
+(function () {
+  var f = document.querySelector('[data-circuits]');
+  f.addEventListener('change', function (e) {
+    var s = e.target.closest('[data-add]'); if (!s || !s.value) return;
+    var span = document.createElement('span'); span.className = 'ci-step'; span.dataset.k = s.value;
+    span.textContent = s.options[s.selectedIndex].text;
+    var x = document.createElement('button'); x.type = 'button'; x.setAttribute('data-rm', ''); x.textContent = '×'; span.appendChild(x);
+    s.parentNode.insertBefore(span, s); s.value = '';
+  });
+  f.addEventListener('click', function (e) {
+    var rm = e.target.closest('[data-rm]'); if (rm) { rm.parentNode.remove(); return; }
+    var del = e.target.closest('[data-del-row]'); if (del) { del.closest('[data-row]').remove(); return; }
+    var add = e.target.closest('[data-add-row]');
+    if (add) {
+      var rows = add.closest('.card-body').querySelector('[data-rows]'), last = rows.lastElementChild, row = last.cloneNode(true);
+      var min = row.querySelector('[data-min]'); min.readOnly = false; min.value = (parseInt(last.querySelector('[data-min]').value) || 0) + 500000;
+      if (!row.querySelector('[data-del-row]')) { var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-link text-danger btn-sm p-0'; b.setAttribute('data-del-row', ''); b.innerHTML = '<i class="bi bi-trash"></i>'; row.appendChild(b); }
+      rows.appendChild(row);
+    }
+  });
+  f.addEventListener('submit', function () {
+    var out = [];
+    f.querySelectorAll('[data-type]').forEach(function (c) {
+      c.querySelectorAll('[data-row]').forEach(function (r) {
+        out.push({ type: c.dataset.type, montant_min: r.querySelector('[data-min]').value, etapes: Array.from(r.querySelectorAll('.ci-step')).map(function (s) { return s.dataset.k; }) });
+      });
+    });
+    f.querySelector('[data-out]').value = JSON.stringify(out);
+  });
+})();
+</script>
+<%- include('../partials/footer') %>

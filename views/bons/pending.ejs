@@ -1,0 +1,26 @@
+<%- include('../partials/header') %>
+<%
+  const VISA_BY_ROLE = { pdg: 'pdg', dg: 'dg', dga: 'dga', daf: 'daf', auditeur1: 'audit', auditeur2: 'audit' };
+  const myKey = VISA_BY_ROLE[user.role] || (user.role === 'super_admin' ? '*' : null);
+  const canReject = ["direction", "super_admin", "pdg", "dg", "dga", "daf", "auditeur1", "auditeur2"].includes(user.role);
+  const ready = bons.filter(b => payable(b));
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-hourglass-split"></i></span>
+  <div class="flex-grow-1">
+    <h1>Bons provisoires en cours</h1>
+    <p class="mb-0"><%= bons.length %> bon(s) en attente · <b><%= ready.length %></b> prêt(s) à payer. Chaque visa apparaît ici en direct.</p>
+  </div>
+  <% if (isCaisse) { %><a href="/caisse" class="btn btn-light"><i class="bi bi-safe2 me-1"></i>Ma caisse</a><% } %>
+</div>
+
+<% if (!bons.length) { %>
+  <div class="card"><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-check2-all"></i></div><b>Aucun bon en attente</b><div class="small">Les nouveaux bons apparaissent ici dès leur création.</div></div></div>
+<% } %>
+<div class="visa-list">
+<% bons.forEach(b => { %>
+  <%- include('_card', { b, myKey, isCaisse, canOrder, canReject, holders }) %>
+<% }) %>
+</div>
+<%- include('_actions') %>
+<%- include('../partials/footer') %>

@@ -1,0 +1,4 @@
+<% const _i = Math.max(0, STEPS.findIndex(s => s.key === (ds.pipeline_status || 'CREE'))); %>
+<span class="mini-pipe" title="Étape <%= _i + 1 %> sur <%= STEPS.length %> · <%= STEPS[_i].label %>">
+  <% STEPS.forEach((s, k) => { %><i class="step-c-<%= s.n %> <%= k < _i ? 'd' : k === _i ? 'n' : '' %>"></i><% }) %>
+</span>

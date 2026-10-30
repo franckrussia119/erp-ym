@@ -1,0 +1,361 @@
+    </main>
+
+    <footer class="app-footer">
+      <span>&copy; <%= new Date().getFullYear() %> YM-TRANSIT · Transit douanier & dédouanement</span>
+      <span>Douala · Kribi</span>
+    </footer>
+  </div><!-- .app-main -->
+</div><!-- .app -->
+
+<% if (typeof user !== 'undefined' && user) {
+     const p = typeof path !== 'undefined' ? path : '';
+     const tabs = [
+       { href: '/dashboard', icon: 'bi-grid-1x2', label: 'Accueil', on: p === '/dashboard' },
+       { href: '/dossiers', icon: 'bi-folder2-open', label: 'Dossiers', on: p.startsWith('/dossiers') },
+       { href: '/taches', icon: 'bi-kanban', label: 'Tâches', on: p.startsWith('/taches') },
+       { href: '/clients', icon: 'bi-people', label: 'Clients', on: p.startsWith('/clients') },
+     ]; %>
+  <nav class="bottom-nav" aria-label="Navigation mobile">
+    <% tabs.forEach(t => { %>
+      <a href="<%= t.href %>" class="<%= t.on ? 'on' : '' %>"><i class="bi <%= t.icon %><%= t.on ? '-fill' : '' %>"></i><%= t.label %></a>
+    <% }) %>
+    <button type="button" id="bottomMenuBtn"><i class="bi bi-grid-3x3-gap"></i>Menu</button>
+  </nav>
+<% } %>
+
+<script src="/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+<script src="/assets/js/forms.js?v=3"></script>
+<script src="/assets/js/saisie.js?v=1"></script>
+<script src="/assets/js/codes.js?v=1"></script>
+<script>
+(function () {
+  var html = document.documentElement;
+  var esc = function (s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  };
+
+  /* ---------- Barre latérale (réduction desktop, tiroir mobile) ---------- */
+  var collapseBtn = document.getElementById('sideCollapseBtn');
+  if (collapseBtn) collapseBtn.addEventListener('click', function () {
+    var mini = html.classList.toggle('side-mini');
+    try { localStorage.setItem('ym-side-mini', mini ? '1' : '0'); } catch (e) {}
+  });
+  var openSide = function () { html.classList.add('side-open'); };
+  var closeSide = function () { html.classList.remove('side-open'); };
+  ['sideOpenBtn', 'bottomMenuBtn'].forEach(function (id) {
+    var el = document.getElementById(id); if (el) el.addEventListener('click', openSide);
+  });
+  var overlay = document.getElementById('sideOverlay');
+  if (overlay) overlay.addEventListener('click', closeSide);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSide(); });
+
+  /* ---------- Sections verrouillées ---------- */
+  window.showLockedMessage = function (label, reason) {
+    document.getElementById('lockedSectionName').textContent = label;
+    document.getElementById('lockedSectionReason').textContent = reason || 'Accès non autorisé pour votre rôle.';
+    if (window.bootstrap) bootstrap.Modal.getOrCreateInstance(document.getElementById('accessDeniedModal')).show();
+  };
+  document.querySelectorAll('[data-locked-label]').forEach(function (a) {
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      showLockedMessage(a.getAttribute('data-locked-label'), a.getAttribute('data-locked-reason'));
+    });
+  });
+
+  /* ---------- Toasts ---------- */
+  var stack = document.getElementById('toastStack');
+  var dismiss = function (t) { t.classList.add('hide'); setTimeout(function () { t.remove(); }, 300); };
+  var arm = function (t) {
+    var x = t.querySelector('.x'); if (x) x.addEventListener('click', function () { dismiss(t); });
+    var ms = parseInt(t.getAttribute('data-timeout') || '6000', 10);
+    setTimeout(function () { dismiss(t); }, ms);
+  };
+  if (stack) stack.querySelectorAll('.flash-toast').forEach(arm);
+  window.showToast = function (titre, contenu, lien, kind) {
+    if (!stack) return;
+    var t = document.createElement('div');
+    t.className = 'flash-toast ' + (kind || 'info');
+    t.setAttribute('data-timeout', '7000');
+    t.innerHTML = '<span class="ti"><i class="bi ' + (kind === 'err' ? 'bi-exclamation-octagon-fill' : kind === 'ok' ? 'bi-check-circle-fill' : 'bi-bell-fill') + '"></i></span>' +
+      '<div class="tx"><b>' + esc(titre) + '</b>' + esc(contenu) +
+      (lien ? '<div class="mt-1"><a href="' + esc(lien) + '">Ouvrir</a></div>' : '') + '</div>' +
+      '<button class="x" type="button" aria-label="Fermer">&times;</button>';
+    stack.appendChild(t); arm(t);
+    while (stack.children.length > 4) stack.removeChild(stack.firstElementChild);
+  };
+
+  /* ---------- Pipeline : centrer l'étape courante sur mobile ---------- */
+  var nowStep = document.querySelector('.stepper .st.now');
+  if (nowStep && nowStep.parentElement.scrollWidth > nowStep.parentElement.clientWidth) {
+    var sp = nowStep.parentElement; sp.scrollLeft = nowStep.offsetLeft - sp.clientWidth / 2 + nowStep.clientWidth / 2;
+  }
+
+  /* ---------- Info-bulles ---------- */
+  if (window.bootstrap) {
+    document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (el) { new bootstrap.Tooltip(el); });
+  }
+
+  <% if (typeof user !== 'undefined' && user) { %>
+  /* ---------- Notifications ---------- */
+  var badge = document.getElementById('notif-badge');
+  var list = document.getElementById('notif-list-container');
+  // Notifications déjà affichées : mémorisées pour ne pas les remontrer à chaque page
+  var shown = {};
+  try { shown = JSON.parse(sessionStorage.getItem('ym-notif-shown') || '{}'); } catch (e) {}
+  var saveShown = function () { try { sessionStorage.setItem('ym-notif-shown', JSON.stringify(shown)); } catch (e) {} };
+  var timeAgo = function (d) {
+    var s = (Date.now() - new Date(d).getTime()) / 1000;
+    if (s < 60) return "à l'instant";
+    if (s < 3600) return 'il y a ' + Math.round(s / 60) + ' min';
+    if (s < 86400) return 'il y a ' + Math.round(s / 3600) + ' h';
+    return new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  };
+
+  window.pollNotifications = function () {
+    fetch('/api/notifications/poll').then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok) return;
+      if (badge) {
+        badge.textContent = data.unreadCount > 9 ? '9+' : data.unreadCount;
+        badge.style.display = data.unreadCount > 0 ? 'grid' : 'none';
+      }
+      // message de la discussion déjà sous les yeux de l'utilisateur : pas de bulle en plus
+      var chatOpenHere = function (n) { return n.lien && n.lien.indexOf(location.pathname + '#chat') === 0 && window.ymChatVisible && window.ymChatVisible(); };
+      var fresh = (data.notifications || []).filter(function (n) { return !shown[n.id] && !(chatOpenHere(n) && (shown[n.id] = true)); });
+      fresh.forEach(function (n) { shown[n.id] = true; });
+      saveShown();
+      // Plus de 3 nouvelles d'un coup : un seul rappel au lieu d'une pile de bulles
+      if (fresh.length > 3) {
+        showToast(fresh.length + ' nouvelles notifications', 'Ouvrez la cloche pour les voir.', null, 'info');
+        return;
+      }
+      fresh.forEach(function (n) {
+        showToast(n.titre, n.contenu, n.lien, 'info');
+        if (!window.__ymPushOn && 'Notification' in window && Notification.permission === 'granted') {
+          try {
+            var dn = new Notification('YM-TRANSIT', { body: n.titre + '\n' + n.contenu, tag: 'notif-' + n.id });
+            dn.onclick = function () { window.focus(); if (n.lien) location.href = n.lien; dn.close(); };
+          } catch (e) {}
+        }
+      });
+    }).catch(function () {});
+  };
+
+  window.loadNotificationsList = function () {
+    if (!list) return;
+    fetch('/api/notifications/list').then(function (r) { return r.json(); }).then(function (data) {
+      if (!data.ok || !data.notifications || !data.notifications.length) {
+        list.innerHTML = '<div class="empty-state py-4"><div class="es-ico"><i class="bi bi-bell-slash"></i></div>Vous êtes à jour.</div>';
+        return;
+      }
+      list.innerHTML = data.notifications.map(function (n) {
+        return '<div class="notif-item ' + (n.lu ? '' : 'unread') + '" data-id="' + n.id + '" data-link="' + esc(n.lien || '') + '">' +
+          '<span class="ni"><i class="bi bi-bell"></i></span>' +
+          '<div class="flex-grow-1 min-w-0"><div class="nt">' + esc(n.titre) + '</div>' +
+          '<div class="nc">' + esc(n.contenu) + '</div><div class="nd">' + timeAgo(n.created_at) + '</div></div></div>';
+      }).join('');
+    }).catch(function () {
+      list.innerHTML = '<div class="empty-state py-3 text-danger small">Impossible de charger les notifications.</div>';
+    });
+  };
+
+  if (list) list.addEventListener('click', function (e) {
+    var item = e.target.closest('.notif-item'); if (!item) return;
+    var link = item.getAttribute('data-link');
+    fetch('/api/notifications/' + item.getAttribute('data-id') + '/read', { method: 'PATCH' }).finally(function () {
+      if (link) location.href = link; else { item.classList.remove('unread'); pollNotifications(); }
+    });
+  });
+  var readAll = document.getElementById('notifReadAll');
+  if (readAll) readAll.addEventListener('click', function () {
+    fetch('/api/notifications/read-all', { method: 'PATCH' }).finally(function () { pollNotifications(); loadNotificationsList(); });
+  });
+  var bell = document.getElementById('notifDropdownBtn');
+  if (bell) bell.addEventListener('show.bs.dropdown', loadNotificationsList);
+
+  pollNotifications();
+  setInterval(pollNotifications, 60000); // filet de sécurité : les notifications arrivent en direct par /api/live
+
+  /* ---------- Application installable (PWA) et notifications push ---------- */
+  var isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  var isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  var swReg = null, deferredInstall = null;
+  var installItem = document.getElementById('installAppItem');
+  var pushItem = document.getElementById('pushToggleItem');
+  var pushPrompt = document.getElementById('pushPrompt');
+  var store = { get: function (k) { try { return localStorage.getItem(k); } catch (e) { return null; } },
+                set: function (k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+
+  var b64ToBytes = function (b64) {
+    var pad = '='.repeat((4 - b64.length % 4) % 4);
+    var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  };
+
+  var banner = function (html, key) {
+    if (store.get(key) === '1' || document.getElementById('pwaBanner')) return null;
+    var el = document.createElement('div');
+    el.className = 'pwa-banner'; el.id = 'pwaBanner';
+    el.innerHTML = '<span class="pb-ico">YM</span><div class="pb-tx">' + html + '</div><button type="button" class="x" aria-label="Fermer">&times;</button>';
+    document.body.appendChild(el);
+    el.querySelector('.x').addEventListener('click', function () { store.set(key, '1'); el.remove(); });
+    return el;
+  };
+
+  var refreshPushUi = function () {
+    if (!swReg || !('PushManager' in window)) return;
+    swReg.pushManager.getSubscription().then(function (sub) {
+      window.__ymPushOn = !!sub;
+      var denied = Notification.permission === 'denied';
+      if (pushItem) {
+        pushItem.hidden = false;
+        pushItem.querySelector('span').textContent = sub ? 'Notifications activées sur cet appareil' : (denied ? 'Notifications bloquées dans le navigateur' : 'Activer les notifications');
+        pushItem.querySelector('i').className = 'bi ' + (sub ? 'bi-bell-fill text-success' : 'bi-bell-slash');
+      }
+      if (pushPrompt) pushPrompt.hidden = !!sub || denied;
+    });
+  };
+
+  var enablePush = function () {
+    if (!swReg) return;
+    if (isIOS && !isStandalone) {
+      showToast('Installez d\'abord l\'application', 'Sur iPhone, ajoutez YM-TRANSIT à l\'écran d\'accueil (bouton Partager, puis « Sur l\'écran d\'accueil »), puis activez les notifications depuis l\'application.', null, 'info');
+      return;
+    }
+    Notification.requestPermission().then(function (perm) {
+      if (perm !== 'granted') { showToast('Notifications refusées', 'Autorisez les notifications pour ce site dans les réglages du navigateur.', null, 'err'); refreshPushUi(); return null; }
+      return fetch('/api/push/key').then(function (r) { return r.json(); }).then(function (d) {
+        return swReg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToBytes(d.key) });
+      }).then(function (sub) {
+        return fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subscription: sub.toJSON() }) });
+      }).then(function () {
+        refreshPushUi();
+        fetch('/api/push/test', { method: 'POST' });
+        showToast('Notifications activées', 'Vous serez prévenu dès qu\'un dossier arrive à votre niveau.', null, 'ok');
+      });
+    }).catch(function (e) { showToast('Activation impossible', String(e && e.message || e), null, 'err'); });
+  };
+
+  var disablePush = function () {
+    swReg.pushManager.getSubscription().then(function (sub) {
+      if (!sub) return;
+      return fetch('/api/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) })
+        .then(function () { return sub.unsubscribe(); });
+    }).then(function () { refreshPushUi(); showToast('Notifications désactivées', 'Cet appareil ne recevra plus d\'alertes.', null, 'info'); });
+  };
+
+  document.querySelectorAll('[data-push-enable]').forEach(function (b) { b.addEventListener('click', enablePush); });
+  if (pushItem) pushItem.addEventListener('click', function () {
+    swReg.pushManager.getSubscription().then(function (sub) { sub ? disablePush() : enablePush(); });
+  });
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).then(function (reg) {
+      swReg = reg;
+      refreshPushUi();
+      // Première visite : proposer les alertes (une seule fois)
+      swReg.pushManager && swReg.pushManager.getSubscription().then(function (sub) {
+        if (!sub && Notification.permission === 'default' && (!isIOS || isStandalone)) {
+          var el = banner('<b>Activez les alertes</b>Soyez prévenu dès qu\'un dossier ou un visa vous attend.<button type="button" class="btn btn-primary btn-sm mt-2" data-push-enable>Activer</button>', 'ym-push-banner');
+          if (el) el.querySelector('[data-push-enable]').addEventListener('click', function () { el.remove(); store.set('ym-push-banner', '1'); enablePush(); });
+        }
+      });
+    }).catch(function (e) { console.warn('Service worker non enregistré', e); });
+    navigator.serviceWorker.addEventListener('message', function (e) { if (e.data && e.data.type === 'push') pollNotifications(); });
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); deferredInstall = e;
+    if (installItem) installItem.hidden = false;
+    var el = banner('<b>Installer YM-TRANSIT</b>Ouvrez l\'ERP comme une application, en plein écran.<button type="button" class="btn btn-primary btn-sm mt-2" data-install>Installer</button>', 'ym-install-banner');
+    if (el) el.querySelector('[data-install]').addEventListener('click', function () { el.remove(); doInstall(); });
+  });
+  var doInstall = function () {
+    if (!deferredInstall) return;
+    deferredInstall.prompt();
+    deferredInstall.userChoice.finally(function () { deferredInstall = null; if (installItem) installItem.hidden = true; });
+  };
+  if (installItem) installItem.addEventListener('click', doInstall);
+  if (isIOS && !isStandalone) {
+    if (installItem) { installItem.hidden = false; installItem.addEventListener('click', function () {
+      showToast('Installer sur iPhone', 'Touchez le bouton Partager de Safari, puis « Sur l\'écran d\'accueil ».', null, 'info'); }); }
+    banner('<b>Installer YM-TRANSIT</b>Touchez <i class="bi bi-box-arrow-up"></i> Partager, puis « Sur l\'écran d\'accueil ».', 'ym-install-banner');
+  }
+
+  /* ---------- Recherche globale ---------- */
+  var input = document.getElementById('globalSearch');
+  var panel = document.getElementById('searchPanel');
+  if (input && panel) {
+    var timer = null, items = [], focusIdx = -1;
+    var meta = {
+      dossier: { label: 'Dossiers', icon: 'bi-folder-fill', color: 'var(--c-dossiers)' },
+      client: { label: 'Clients', icon: 'bi-person-fill', color: 'var(--c-clients)' },
+      document: { label: 'Factures & devis', icon: 'bi-receipt', color: 'var(--c-facturation)' }
+    };
+    var render = function (results, q) {
+      if (!results.length) { panel.innerHTML = '<div class="search-empty">Aucun résultat pour « ' + esc(q) + ' »</div>'; panel.classList.add('show'); items = []; return; }
+      var html = '', last = '';
+      results.forEach(function (r) {
+        var m = meta[r.type];
+        if (r.type !== last) { html += '<div class="search-group">' + m.label + '</div>'; last = r.type; }
+        html += '<a class="search-item" href="' + esc(r.url) + '"><span class="ico" style="color:' + m.color + ';background:color-mix(in srgb,' + m.color + ' 12%, white)"><i class="bi ' + m.icon + '"></i></span>' +
+          '<span class="min-w-0"><div class="t">' + esc(r.label) + '</div><div class="s text-truncate">' + esc(r.sub) + '</div></span></a>';
+      });
+      panel.innerHTML = html; panel.classList.add('show');
+      items = [].slice.call(panel.querySelectorAll('.search-item')); focusIdx = -1;
+    };
+    input.addEventListener('input', function () {
+      var q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 2) { panel.classList.remove('show'); return; }
+      timer = setTimeout(function () {
+        fetch('/api/search?q=' + encodeURIComponent(q)).then(function (r) { return r.json(); })
+          .then(function (d) { if (input.value.trim() === q) render(d.results || [], q); }).catch(function () {});
+      }, 180);
+    });
+    input.addEventListener('keydown', function (e) {
+      if (!items.length) return;
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        focusIdx = (focusIdx + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+        items.forEach(function (el, i) { el.classList.toggle('focus', i === focusIdx); });
+      } else if (e.key === 'Enter') {
+        e.preventDefault(); location.href = (items[focusIdx] || items[0]).href;
+      } else if (e.key === 'Escape') { panel.classList.remove('show'); input.blur(); }
+    });
+    document.addEventListener('click', function (e) { if (!e.target.closest('#topSearch')) panel.classList.remove('show'); });
+    document.addEventListener('keydown', function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); input.focus(); input.select(); }
+    });
+  }
+  <% } %>
+})();
+</script>
+<% if (typeof user !== 'undefined' && user) { %><script src="/assets/js/live.js?v=3"></script><script src="/assets/js/fil.js?v=2"></script><% } %>
+<script>
+// Bandeaux animés : les montants comptent jusqu'à leur valeur à l'ouverture de la page
+(function () {
+  if (!document.querySelector('.hero-fx')) return;
+  if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  document.querySelectorAll('.cx-balance, .dash-hero ~ * .kpi .k-value').forEach(function (el) {
+    var node = Array.prototype.find.call(el.childNodes, function (n) { return n.nodeType === 3 && /\d/.test(n.nodeValue); });
+    if (!node) return;
+    var raw = node.nodeValue, neg = /[-−]/.test(raw), target = parseInt(raw.replace(/[^\d]/g, ''), 10);
+    if (!target || target < 10) return;
+    var t0 = null, dur = 1100;
+    el.classList.add('counting');
+    function step(t) {
+      if (!t0) t0 = t;
+      var k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3);
+      node.nodeValue = raw.replace(/[-−]?[\d\s\u202f\u00a0.]*\d/, (neg ? '−' : '') + Math.round(target * e).toLocaleString('fr-FR'));
+      if (k < 1) requestAnimationFrame(step); else { node.nodeValue = raw; el.classList.remove('counting'); }
+    }
+    requestAnimationFrame(step);
+  });
+})();
+</script>
+</body>
+</html>

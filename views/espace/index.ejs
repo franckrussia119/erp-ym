@@ -1,0 +1,109 @@
+<%- include('../partials/header') %>
+<% const f = (n) => Math.round(n || 0).toLocaleString('fr-FR'); %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-person-workspace"></i></span>
+  <div class="flex-grow-1">
+    <h1>Mon espace</h1>
+    <p class="mb-0">Vos dossiers à traiter, vos tâches, vos demandes d'argent et vos dépenses du mois.</p>
+  </div>
+  <div class="ph-actions">
+    <a href="/comptes/personnel/<%= user.id %>" class="btn btn-light"><i class="bi bi-person-lines-fill me-1"></i>Mon compte</a>
+    <a href="/rh/mes-bulletins" class="btn btn-light"><i class="bi bi-receipt me-1"></i>Mes bulletins et congés</a>
+    <a href="/demandes" class="btn btn-light"><i class="bi bi-inboxes me-1"></i>Mes demandes</a>
+    <a href="/depenses" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>Nouvelle demande interne</a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-6 col-lg-3"><div class="card kpi-card"><div class="card-body"><div class="text-muted small">Demandé ce mois</div><div class="fs-4 fw-bold"><%= f(stats.demande) %> F</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card kpi-card"><div class="card-body"><div class="text-muted small">Payé par la caisse</div><div class="fs-4 fw-bold"><%= f(stats.paye) %> F</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card kpi-card"><div class="card-body"><div class="text-muted small">Dépensé (justifié)</div><div class="fs-4 fw-bold"><%= f(stats.depense) %> F</div></div></div></div>
+  <div class="col-6 col-lg-3"><div class="card kpi-card"><div class="card-body"><div class="text-muted small">Bons en attente de visa</div><div class="fs-4 fw-bold"><%= stats.enAttente %></div></div></div></div>
+</div>
+
+<% if (aJustifier.length) { %>
+<div class="alert alert-warning d-flex align-items-start gap-2">
+  <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+  <div><strong><%= aJustifier.length %> avance(s) à justifier.</strong> Saisissez le bon réel avec les montants dépensés.
+    <div class="d-flex flex-wrap gap-2 mt-2">
+      <% aJustifier.forEach(b => { %>
+        <a class="btn btn-sm btn-light" href="/depenses/<%= b.id %>/justifier"><%= b.numero %> · <%= f(b.montant_demande) %> F</a>
+      <% }) %>
+    </div>
+  </div>
+</div>
+<% } %>
+
+<div class="row g-4">
+  <div class="col-xl-7">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-folder2-open me-2" style="color:var(--accent)"></i>Dossiers à mon niveau <span class="badge bg-secondary ms-1"><%= dossiers.length %></span></div>
+      <div class="card-body p-0">
+        <% if (!myStages.length) { %>
+          <p class="text-muted p-3 mb-0">Votre rôle n'est responsable d'aucune étape du circuit.</p>
+        <% } else if (!dossiers.length) { %>
+          <p class="text-muted p-3 mb-0">Aucun dossier en attente chez vous.</p>
+        <% } else { %>
+        <table class="table table-hover align-middle mb-0">
+          <thead><tr><th>Dossier</th><th>BL et contenu</th><th>Étape</th><th class="text-end">Retard</th></tr></thead>
+          <tbody>
+          <% dossiers.forEach(d => { const st = stepOf(d.pipeline_status); const late = hoursLate(d); %>
+            <tr class="row-link" data-href="/dossiers/<%= d.id %>" onclick="location.href=this.dataset.href">
+              <td><a href="/dossiers/<%= d.id %>" class="fw-semibold"><%= dossierTitle(d) %></a></td>
+              <td class="small text-muted"><%= dossierSub(d) %></td>
+              <td><span class="badge step-c-<%= st.n %>"><%= st.label %></span></td>
+              <td class="text-end"><% if (late) { %><span class="text-danger fw-semibold"><%= late %> h</span><% } else { %><span class="text-success">à l'heure</span><% } %></td>
+            </tr>
+          <% }) %>
+          </tbody>
+        </table>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><i class="bi bi-check2-square me-2" style="color:var(--accent)"></i>Mes tâches</div>
+      <div class="card-body p-0">
+        <% if (!taches.length) { %><p class="text-muted p-3 mb-0">Aucune tâche ouverte.</p><% } else { %>
+        <ul class="list-group list-group-flush">
+          <% taches.forEach(t => { const over = t.deadline && new Date(t.deadline) < new Date(); %>
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <div><div class="fw-semibold"><%= t.titre || t.description || 'Tâche' %></div>
+                <% if (t.dossier) { %><a class="small" href="/dossiers/<%= t.dossier.id %>"><%= t.dossier.numero %></a><% } %></div>
+              <% if (t.deadline) { %><span class="small <%= over ? 'text-danger fw-semibold' : 'text-muted' %>"><%= new Date(t.deadline).toLocaleDateString('fr-FR') %></span><% } %>
+            </li>
+          <% }) %>
+        </ul>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-xl-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-receipt me-2" style="color:var(--accent)"></i>Mes demandes d'argent</div>
+      <div class="card-body p-0">
+        <% if (!mesBons.length) { %><p class="text-muted p-3 mb-0">Aucune demande.</p><% } else { %>
+        <ul class="list-group list-group-flush">
+          <% mesBons.forEach(b => { const vp = visaProgress(b); %>
+            <li class="list-group-item row-link" onclick="location.href='/bons/<%= b.id %>'">
+              <div class="d-flex justify-content-between">
+                <div><a href="/bons/<%= b.id %>" class="fw-semibold"><%= b.numero %></a>
+                  <span class="text-muted small ms-1"><%= b.dossier ? b.dossier.numero : categorieLabel(b.categorie) %></span></div>
+                <span class="fw-semibold"><%= f(b.montant_demande) %> F</span>
+              </div>
+              <div class="small text-muted d-flex justify-content-between">
+                <span><%= b.objet || '' %></span>
+                <span>
+                  <% if (b.etat === 'EN_ATTENTE') { %>Visas <%= vp.count %>/<%= vp.total %><% } else if (b.etat === 'REJETE') { %><span class="text-danger">Rejeté</span><% } else if (b.etat === 'A_MODIFIER') { %><a class="text-warning fw-semibold" href="/bons/<%= b.id %>#modifier">À modifier</a><% } else if (b.bon_reel && b.bon_reel.confirme_at) { %><span class="text-success">Justifié</span><% } else if (b.bon_reel) { %>Justif. à confirmer<% } else { %><span class="text-warning">Payé · à justifier</span><% } %>
+                </span>
+              </div>
+            </li>
+          <% }) %>
+        </ul>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

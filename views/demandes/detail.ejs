@@ -1,0 +1,112 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const who = (u) => u ? [u.prenom, u.nom].filter(Boolean).join(' ') : '';
+  const dd = (s) => new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'long', year: 'numeric' });
+  const dtl = (d) => new Date(d).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const S = STATE[d.etat];
+%>
+<div class="page-head">
+  <span class="ph-ico" style="background: <%= T.couleur %>"><i class="bi <%= T.icon %>"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1><%= d.titre %></h1>
+    <p class="mb-0"><%= d.numero %> · <%= T.label %> · demandé par <b><%= who(d.demandeur) %></b><% if (d.departement) { %> · <span class="dept-chip" style="--d: <%= d.departement.couleur %>"><%= d.departement.nom %></span><% } %></p>
+  </div>
+  <a class="btn btn-light btn-sm" href="/demandes"><i class="bi bi-arrow-left me-1"></i>Demandes</a>
+</div>
+
+<div class="dm-banner <%= S.cls %>">
+  <i class="bi <%= S.icon %>"></i>
+  <div>
+    <b><%= S.label %></b>
+    <span>
+      <% if (ec) { %>En attente de : <%= APPROBATEURS[ec.approbateur] %><%= attendus.length ? ' (' + attendus.map(who).join(', ') + ')' : '' %>.
+      <% } else if (d.etat === 'APPROUVEE') { %>Toutes les validations sont faites<%= d.decided_at ? ', le ' + dtl(d.decided_at) : '' %>.
+      <% } else if (d.etat === 'REFUSEE') { %>Voir le motif dans le circuit ci-dessous.
+      <% } else { %>Annulée par le demandeur.<% } %>
+    </span>
+  </div>
+  <% if (d.montant) { %><b class="ms-auto dm-banner-amt"><%= F(d.montant) %> F</b><% } %>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-file-text me-2"></i>La demande</div>
+      <div class="card-body">
+        <dl class="dm-dl">
+          <% if (d.type === 'CONGE') { %>
+            <dt>Motif</dt><dd><%= donnees.motif %></dd>
+            <dt>Période</dt><dd>du <%= dd(donnees.du) %> au <%= dd(donnees.au) %></dd>
+            <dt>Durée</dt><dd><b><%= donnees.jours %> jour<%= donnees.jours > 1 ? 's' : '' %> ouvré<%= donnees.jours > 1 ? 's' : '' %></b></dd>
+            <% if (donnees.interim) { %><dt>Remplaçant</dt><dd><%= donnees.interim %></dd><% } %>
+          <% } else { %>
+            <% if (donnees.bien) { %><dt>Bien concerné</dt><dd><%= donnees.bien %></dd><% } %>
+            <% if (donnees.fournisseur) { %><dt><%= d.type === 'REPARATION' ? 'Prestataire' : 'Fournisseur' %></dt><dd><%= donnees.fournisseur %></dd><% } %>
+            <% if (d.montant) { %><dt>Montant estimé</dt><dd><b><%= F(d.montant) %> F</b></dd><% } %>
+            <% if (donnees.urgence) { %><dt>Priorité</dt><dd><span class="badge text-bg-danger">Urgent</span></dd><% } %>
+          <% } %>
+          <dt>Envoyée le</dt><dd><%= dtl(d.created_at) %></dd>
+        </dl>
+        <% if (d.details) { %><div class="dm-details"><%= d.details %></div><% } %>
+        <% if (pieces.length) { %>
+          <div class="d-flex flex-wrap gap-2 mt-3">
+            <% pieces.forEach(p => { %><a class="btn btn-light btn-sm" target="_blank" href="/demandes/<%= d.id %>/piece/<%= encodeURIComponent(p.filename) %>"><i class="bi bi-paperclip me-1"></i><%= p.original %></a><% }) %>
+          </div>
+        <% } %>
+        <% if (d.etat === 'APPROUVEE' && (d.type === 'ACHAT' || d.type === 'REPARATION') && d.demandeur_id === user.id) { %>
+          <a class="btn btn-primary mt-3" href="/depenses?demande=<%= d.id %>"><i class="bi bi-wallet2 me-1"></i>Demander l'argent à la caisse</a>
+        <% } %>
+        <% if (canCancel) { %>
+          <form method="POST" action="/demandes/<%= d.id %>/annuler" class="mt-3" onsubmit="return confirm('Annuler cette demande ?')"><button class="btn btn-outline-secondary btn-sm"><i class="bi bi-x-lg me-1"></i>Annuler ma demande</button></form>
+        <% } %>
+      </div>
+    </div>
+
+    <% if (canDecide) { %>
+      <form class="card card-body dm-decide" id="decision" method="POST" action="/demandes/<%= d.id %>/decision">
+        <h6 class="mb-2"><i class="bi bi-pen me-1"></i>Votre décision (<%= APPROBATEURS[ec.approbateur] %>)</h6>
+        <textarea name="commentaire" class="form-control mb-2" rows="2" maxlength="1000" placeholder="Commentaire (obligatoire pour un refus)" data-dm-comment></textarea>
+        <div class="d-flex gap-2">
+          <button class="btn btn-success flex-grow-1" name="decision" value="APPROUVE"><i class="bi bi-check-lg me-1"></i>Valider</button>
+          <button class="btn btn-outline-danger flex-grow-1" name="decision" value="REFUSE" data-dm-refuse><i class="bi bi-x-lg me-1"></i>Refuser</button>
+        </div>
+      </form>
+    <% } %>
+    <div class="mt-4"><%- include('../partials/_fil', { cible: 'demande', cibleId: d.id, titre: 'Discussion' }) %></div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-diagram-2 me-2"></i>Circuit de validation</div>
+      <div class="card-body">
+        <ol class="dm-flow">
+          <li class="done"><span class="dm-dot"><i class="bi bi-send"></i></span><div><b>Demande envoyée</b><small><%= who(d.demandeur) %> · <%= dtl(d.created_at) %></small></div></li>
+          <% d.etapes.forEach(e => { const st = e.decision === 'APPROUVE' ? 'done' : e.decision === 'REFUSE' ? 'ko' : ec && ec.id === e.id ? 'now' : (d.etat === 'EN_ATTENTE' ? 'todo' : 'skip'); %>
+            <li class="<%= st %>">
+              <span class="dm-dot"><i class="bi <%= st === 'done' ? 'bi-check-lg' : st === 'ko' ? 'bi-x-lg' : st === 'now' ? 'bi-hourglass-split' : 'bi-circle' %>"></i></span>
+              <div>
+                <b><%= APPROBATEURS[e.approbateur] %></b>
+                <small>
+                  <% if (e.decision) { %><%= e.decision === 'APPROUVE' ? 'Validé' : 'Refusé' %> par <%= who(e.decideur) %> · <%= dtl(e.decided_at) %>
+                  <% } else if (st === 'now') { %>En attente<%= attendus.length ? ' : ' + attendus.map(who).join(', ') : '' %>
+                  <% } else if (st === 'todo') { %>À venir<% } else { %>Non nécessaire<% } %>
+                </small>
+                <% if (e.commentaire) { %><q><%= e.commentaire %></q><% } %>
+              </div>
+            </li>
+          <% }) %>
+          <% if (!d.etapes.length) { %><li class="done"><span class="dm-dot"><i class="bi bi-check-lg"></i></span><div><b>Validée d'office</b><small>Aucune validation nécessaire.</small></div></li><% } %>
+          <% if (informes.length) { %><li class="<%= d.etat === 'EN_ATTENTE' ? 'todo' : 'done' %>"><span class="dm-dot"><i class="bi bi-bell"></i></span><div><b>Information : <%= informes.map(r => APPROBATEURS[r] || r.toUpperCase()).join(' et ') %></b><small><%= d.etat === 'EN_ATTENTE' ? 'Prévenus de la décision, acceptée ou refusée' : 'Prévenus de la décision' %></small></div></li><% } %>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var b = document.querySelector('[data-dm-refuse]'), c = document.querySelector('[data-dm-comment]');
+    if (b) b.addEventListener('click', function (e) { if (!c.value.trim()) { e.preventDefault(); c.classList.add('is-invalid'); c.placeholder = 'Indiquez le motif du refus'; c.focus(); } });
+  })();
+</script>
+<%- include('../partials/footer') %>

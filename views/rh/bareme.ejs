@@ -1,0 +1,57 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const field = (k, label, unit, help) => `<div class="col-6 col-md-4"><label class="form-label small">${label}</label><div class="input-group input-group-sm"><input name="${k}" type="number" step="any" class="form-control text-end" value="${b[k]}" ${canEdit ? '' : 'disabled'}><span class="input-group-text">${unit}</span></div>${help ? `<div class="form-text">${help}</div>` : ''}</div>`;
+  const tranches = (prefix, list, unit) => list.map(t => `<div class="rh-tr" data-tr><span>jusqu'à</span><input name="${prefix}_jusqua" type="number" class="form-control form-control-sm text-end" placeholder="au-delà" value="${t.jusqua ?? ''}" ${canEdit ? '' : 'disabled'}><span>→</span><input name="${prefix}_valeur" type="number" step="any" class="form-control form-control-sm text-end" value="${t.valeur}" ${canEdit ? '' : 'disabled'}><span>${unit}</span></div>`).join('');
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-sliders"></i></span>
+  <div class="flex-grow-1">
+    <h1>Barème de paie</h1>
+    <p class="mb-0">Taux CNPS, IRPP, CAC, CFC, FNE, RAV et TDL utilisés pour calculer les bulletins. Mettez-les à jour à chaque loi de finances.</p>
+  </div>
+  <a class="btn btn-light btn-sm" href="/rh/paie"><i class="bi bi-arrow-left me-1"></i>Paie</a>
+</div>
+<%- include('_nav') %>
+<div class="alert alert-info d-flex gap-2"><i class="bi bi-info-circle"></i><div>Ces valeurs de départ suivent les règles camerounaises en vigueur à notre connaissance. <b>Faites-les vérifier par votre comptable ou votre conseiller fiscal</b> avant la première paie.</div></div>
+
+<form method="POST" action="/rh/bareme">
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card mb-4"><div class="card-header">CNPS</div><div class="card-body row g-2">
+        <%- field('cnps_plafond', 'Plafond mensuel', 'F', 'Pension et allocations familiales') %>
+        <%- field('cnps_salarie', 'Pension, part salariale', '%') %>
+        <%- field('cnps_pension_employeur', 'Pension, part patronale', '%') %>
+        <%- field('cnps_af_employeur', 'Allocations familiales', '%') %>
+        <%- field('cnps_at_employeur', 'Accidents du travail', '%', '1,75 / 2,5 / 5 selon le risque') %>
+      </div></div>
+      <div class="card mb-4"><div class="card-header">IRPP et taxes</div><div class="card-body row g-2">
+        <%- field('irpp_abattement_frais', 'Abattement frais professionnels', '%') %>
+        <%- field('irpp_abattement_annuel', 'Abattement annuel', 'F') %>
+        <%- field('irpp_seuil_mensuel', 'Pas d\'IRPP en dessous de', 'F / mois') %>
+        <%- field('cac', 'CAC (sur l\'IRPP)', '%') %>
+        <%- field('cfc_salarie', 'CFC, part salariale', '%') %>
+        <%- field('cfc_employeur', 'CFC, part patronale', '%') %>
+        <%- field('fne_employeur', 'FNE (patronal)', '%') %>
+        <%- field('jours_mois', 'Jours par mois (absences)', 'j') %>
+        <div class="col-12 mt-3"><label class="form-label small fw-semibold">Barème annuel de l'IRPP</label><div data-trs><%- tranches('irpp', b.irpp_tranches, '%') %></div></div>
+      </div></div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card mb-4"><div class="card-header">Redevance audiovisuelle (selon le brut mensuel)</div><div class="card-body"><div data-trs><%- tranches('rav', b.rav, 'F') %></div></div></div>
+      <div class="card mb-4"><div class="card-header">Taxe de développement local (selon le salaire de base)</div><div class="card-body"><div data-trs><%- tranches('tdl', b.tdl, 'F') %></div></div></div>
+      <div class="card mb-4"><div class="card-header">Exemples avec ce barème</div><div class="card-body p-0">
+        <table class="table table-sm mb-0"><thead><tr><th class="text-end">Base</th><th class="text-end">Retenues</th><th class="text-end">Net</th><th class="text-end">Coût</th></tr></thead><tbody>
+          <% exemples.forEach(x => { %><tr><td class="text-end"><%= F(x.s) %></td><td class="text-end">−<%= F(x.c.total_retenues) %></td><td class="text-end fw-bold"><%= F(x.c.net) %></td><td class="text-end text-muted"><%= F(x.c.cout_total) %></td></tr><% }) %>
+        </tbody></table>
+      </div></div>
+    </div>
+  </div>
+  <% if (canEdit) { %>
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Enregistrer le barème</button>
+      <button class="btn btn-light" name="reset" value="1" onclick="return confirm('Remettre toutes les valeurs de départ ?')">Valeurs de départ</button>
+    </div>
+  <% } else { %><p class="small text-muted">Seuls la RH, le DAF et le super administrateur modifient le barème.</p><% } %>
+</form>
+<%- include('../partials/footer') %>

@@ -1,0 +1,249 @@
+<%- include('../partials/header') %>
+<%
+  const stageMeta = Object.fromEntries(STEPS.map(st => [st.key, st]));
+  const stage = typeof selectedStage !== 'undefined' ? selectedStage : '';
+  const canCreate = typeof user !== 'undefined' && ['secretariat', 'secretaire', 'super_admin'].includes(user.role);
+  const isAdmin = typeof user !== 'undefined' && user.role === 'super_admin';
+  const qs = (extra) => {
+    const p = { client_id: typeof selectedClientId !== 'undefined' ? selectedClientId : '', etat: typeof selectedEtat !== 'undefined' ? selectedEtat : '', pipeline_status: stage, vue: vue === 'board' ? 'board' : '', ...extra };
+    const s = Object.entries(p).filter(([, v]) => v).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+    return '/dossiers' + (s ? '?' + s : '');
+  };
+%>
+
+<div class="page-head">
+  <div class="ph-ico"><i class="bi bi-folder-fill"></i></div>
+  <div>
+    <nav aria-label="breadcrumb"><ol class="breadcrumb mb-1"><li class="breadcrumb-item"><a href="/dashboard">Accueil</a></li><li class="breadcrumb-item active">Dossiers</li></ol></nav>
+    <h1>Dossiers de transit</h1>
+    <p>Import, export et transit : suivez chaque dossier de l'ouverture à l'archive.</p>
+  </div>
+  <div class="ph-actions">
+    <div class="view-toggle" role="group" aria-label="Affichage">
+      <a href="<%= qs({ vue: '' }) %>" class="<%= vue !== 'board' ? 'on' : '' %>"><i class="bi bi-list-ul me-1"></i>Liste</a>
+      <a href="<%= qs({ vue: 'board' }) %>" class="<%= vue === 'board' ? 'on' : '' %>"><i class="bi bi-kanban me-1"></i>Par étape</a>
+    </div>
+    <% if (canCreate) { %>
+      <a href="/dossiers/create" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Nouveau dossier</a>
+    <% } %>
+  </div>
+</div>
+
+<!-- Étapes : filtre rapide coloré -->
+<div class="stage-filter mb-3">
+  <a href="<%= qs({ pipeline_status: '' }) %>" class="sf-chip <%= !stage ? 'on' : '' %>">Toutes les étapes</a>
+  <% Object.entries(stageMeta).forEach(([key, st]) => { %>
+    <a href="<%= qs({ pipeline_status: key }) %>" class="sf-chip step-c-<%= st.n %> <%= stage === key ? 'on' : '' %>"><span class="dot"></span><%= st.label %></a>
+  <% }) %>
+</div>
+
+<!-- Recherche et filtres -->
+<div class="card mb-3">
+  <div class="card-body py-3">
+    <form action="/dossiers" method="GET" class="row g-2 align-items-center">
+      <% if (stage) { %><input type="hidden" name="pipeline_status" value="<%= stage %>"><% } %>
+      <div class="col-lg-6">
+        <div class="input-search">
+          <i class="bi bi-search"></i>
+          <input type="text" id="js-client-search" class="form-control" placeholder="Filtrer par numéro, client, BL, port, représentant…">
+        </div>
+      </div>
+      <div class="col-sm-6 col-lg-3">
+        <select name="client_id" class="form-select" onchange="this.form.submit()" aria-label="Client">
+          <option value="">Tous les clients</option>
+          <% (clients || []).forEach(c => { %>
+            <option value="<%= c.id %>" <%= typeof selectedClientId !== 'undefined' && String(selectedClientId) === String(c.id) ? 'selected' : '' %>><%= c.nom %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-sm-4 col-lg-2">
+        <select name="etat" class="form-select" onchange="this.form.submit()" aria-label="État">
+          <option value="">Tous les états</option>
+          <% [['OUVERT','Ouvert'],['EN_COURS','En cours'],['FIN DE TRANSIT','Fin de transit'],['CLOTURE','Clôturé']].forEach(([v, l]) => { %>
+            <option value="<%= v %>" <%= typeof selectedEtat !== 'undefined' && selectedEtat === v ? 'selected' : '' %>><%= l %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="col-sm-2 col-lg-1">
+        <a href="/dossiers" class="btn btn-light w-100" title="Réinitialiser les filtres"><i class="bi bi-arrow-counterclockwise"></i></a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<% if (vue === 'board') { %>
+  <div class="board">
+    <% STEPS.filter(st => stage ? st.key === stage : st.key !== 'ARCHIVE').forEach(st => { const col = dossiers.filter(d => d.pipeline_status === st.key); %>
+      <section class="board-col step-c-<%= st.n %>">
+        <header><i class="bi <%= st.icon %>" style="color:var(--step)"></i><%= st.label %><span class="n"><%= col.length %></span></header>
+        <div class="cards">
+          <% col.forEach(ds => { const late = lateOf(ds); %>
+            <a href="/dossiers/<%= ds.id %>" class="board-card step-c-<%= st.n %>">
+              <div class="bc-top"><span class="fw-bold text-truncate"><%= dossierTitle(ds) %></span><span class="nat-tag <%= ds.nature === 'IMPORT' ? 'nat-import' : 'nat-export' %>"><%= ds.nature %></span></div>
+              <div class="bc-cl"><%= dossierSub(ds) %></div>
+              <div class="bc-meta">
+                <span><i class="bi bi-box-seam"></i> <%= ds._count.conteneurs %></span>
+                <span><i class="bi bi-paperclip"></i> <%= ds._count.files %></span>
+                <% if (late > 0) { %><span class="late"><i class="bi bi-alarm"></i> <%= late >= 48 ? Math.round(late / 24) + ' j' : late + ' h' %> de retard</span><% } %>
+              </div>
+            </a>
+          <% }) %>
+          <% if (!col.length) { %><div class="small text-muted text-center py-3">Aucun dossier</div><% } %>
+        </div>
+      </section>
+    <% }) %>
+  </div>
+<% } else { %>
+<!-- Registre -->
+<div class="card">
+  <div class="card-header d-flex align-items-center justify-content-between">
+    <span>Registre <span class="badge bg-primary-subtle text-primary-emphasis ms-1" id="total-rows-count"><%= dossiers ? dossiers.length : 0 %></span></span>
+    <% if (stage && stageMeta[stage]) { %><span class="stage-pill step-c-<%= stageMeta[stage].n %>"><%= stageMeta[stage].label %></span><% } %>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0" id="dossiers-table">
+      <thead>
+        <tr>
+          <th>Dossier</th>
+          <th>Référence</th>
+          <th class="d-none d-xl-table-cell">Représentant</th>
+          <th class="d-none d-lg-table-cell">Marchandise</th>
+          <th class="d-none d-md-table-cell">Port</th>
+          <th>Étape</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        <% if (dossiers && dossiers.length > 0) { %>
+          <% dossiers.forEach(ds => {
+               let repSearch = '', repName = '', repTel = '';
+               if (ds.representant_obj) {
+                 repName = (ds.representant_obj.nom + ' ' + (ds.representant_obj.prenom || '')).trim(); repTel = ds.representant_obj.tel || '';
+               } else if (ds.representant_libre) {
+                 repName = ds.representant_libre;
+               } else if (ds.client && ds.client.client_representants && ds.client.client_representants.length > 0) {
+                 const main = ds.client.client_representants.find(cr => cr.est_principal) || ds.client.client_representants[0];
+                 if (main && main.representant) { repName = (main.representant.nom + ' ' + (main.representant.prenom || '')).trim(); repTel = main.representant.tel || ''; }
+                 repSearch = ds.client.client_representants.map(cr => cr.representant ? (cr.representant.nom + ' ' + (cr.representant.prenom || '')) : '').join(' ');
+               }
+               repSearch = (repSearch || repName).toLowerCase();
+               const st = stageMeta[ds.pipeline_status] || { n: 1, label: ds.pipeline_status || '—' };
+               const natureCls = ds.nature === 'IMPORT' ? 'nat-import' : ds.nature === 'EXPORT' ? 'nat-export' : 'nat-transit';
+          %>
+            <tr class="dossier-tr row-link" data-href="/dossiers/<%= ds.id %>"
+                data-numero="<%= ds.numero.toLowerCase() %> <%= ds.numero_ordre || '' %>"
+                data-client="<%= ds.client.nom.toLowerCase() %>"
+                data-port="<%= ds.port.toLowerCase() %>"
+                data-nature="<%= ds.nature.toLowerCase() %>"
+                data-contenu="<%= ds.contenu ? ds.contenu.toLowerCase() : '' %>"
+                data-bl="<%= ds.bl ? ds.bl.toLowerCase() : '' %>"
+                data-representant="<%= repSearch %>">
+              <td>
+                <a href="/dossiers/<%= ds.id %>" class="d-flex align-items-center gap-2 text-decoration-none">
+                  <span class="row-ico <%= natureCls %>"><i class="bi bi-folder-fill"></i></span>
+                  <span>
+                    <span class="d-block fw-semibold text-truncate" style="max-width: 320px;" title="<%= dossierTitle(ds) %>"><%= dossierTitle(ds) %></span>
+                    <span class="d-block small text-muted text-truncate" style="max-width: 320px;">BL <%= ds.bl || '—' %><%= ds.contenu ? ' · ' + ds.contenu : '' %></span>
+                  </span>
+                </a>
+              </td>
+              <td>
+                <div class="small fw-semibold text-dark"><%= ds.numero_ordre ? 'N° ' + ds.numero_ordre : 'Sans numéro' %><% if (ds.rejet_motif && ds.pipeline_status === 'CREE') { %> <span class="badge text-bg-danger" title="<%= ds.rejet_motif %>">Rejeté</span><% } %></div>
+                <div class="small font-monospace text-muted text-truncate" style="max-width: 240px;" title="<%= ds.numero %>"><%= ds.numero %></div>
+                <div class="small text-muted">NIU <%= ds.client.niu || '—' %></div>
+              </td>
+              <td class="d-none d-xl-table-cell">
+                <% if (repName) { %>
+                  <div class="small fw-semibold text-dark text-nowrap"><%= repName %></div>
+                  <% if (repTel) { %><div class="small text-muted"><%= repTel %></div><% } %>
+                <% } else { %><span class="small text-muted">—</span><% } %>
+              </td>
+              <td class="d-none d-lg-table-cell">
+                <div class="small text-dark text-truncate" style="max-width: 190px;" title="<%= ds.contenu || '' %>"><%= ds.contenu || 'Non renseignée' %></div>
+                <div class="small d-flex align-items-center gap-2">
+                  <span class="nat-tag <%= natureCls %>"><%= ds.nature %></span>
+                  <% if (ds.validation) { %><span class="text-success"><i class="bi bi-patch-check-fill"></i> Validé</span><% } %>
+                </div>
+              </td>
+              <td class="d-none d-md-table-cell small text-nowrap" title="<%= ds.port %>"><i class="bi bi-geo-alt text-muted me-1"></i><%= ((ds.port || '').match(/\(([^)]+)\)/) || [])[1] || ds.port %></td>
+              <td><span class="stage-pill step-c-<%= st.n %>"><%= st.label %></span></td>
+              <td class="text-end">
+                <div class="d-inline-flex gap-1">
+                  <a href="/dossiers/<%= ds.id %>" class="btn btn-sm btn-light" title="Ouvrir le dossier"><i class="bi bi-arrow-up-right"></i></a>
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-light" type="button" data-bs-toggle="dropdown" aria-label="Plus d'actions"><i class="bi bi-three-dots"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                      <li><a class="dropdown-item" href="/dossiers/<%= ds.id %>"><i class="bi bi-eye"></i> Ouvrir</a></li>
+                      <li><a class="dropdown-item" href="/dossiers/<%= ds.id %>/print" target="_blank"><i class="bi bi-printer"></i> Imprimer la fiche</a></li>
+                      <% if (ds.pipeline_status === 'CREE') { %>
+                        <li><a class="dropdown-item" href="/dossiers/<%= ds.id %>/edit"><i class="bi bi-pencil"></i> Modifier</a></li>
+                      <% } else { %>
+                        <li><span class="dropdown-item disabled"><i class="bi bi-lock"></i> Modifier (dossier soumis)</span></li>
+                      <% } %>
+                      <% if (isAdmin) { %>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                          <form action="/dossiers/delete/<%= ds.id %>" method="POST" onsubmit="return confirm('Supprimer définitivement le dossier <%= ds.numero %> et toutes ses données ?');">
+                            <button type="submit" class="dropdown-item text-danger"><i class="bi bi-trash3"></i> Supprimer</button>
+                          </form>
+                        </li>
+                      <% } %>
+                    </ul>
+                  </div>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        <% } else { %>
+          <tr id="empty-row-fallback">
+            <td colspan="7">
+              <div class="empty-state">
+                <div class="es-ico"><i class="bi bi-folder2-open"></i></div>
+                <h6 class="mb-1">Aucun dossier pour ce filtre</h6>
+                <p class="small mb-3">Modifiez les filtres ou créez un nouveau dossier.</p>
+                <% if (canCreate) { %><a href="/dossiers/create" class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Nouveau dossier</a><% } %>
+              </div>
+            </td>
+          </tr>
+        <% } %>
+        <tr id="no-js-results" style="display: none;">
+          <td colspan="7">
+            <div class="empty-state"><div class="es-ico"><i class="bi bi-search"></i></div>Aucun dossier ne correspond à votre recherche.</div>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<% } %>
+
+<script>
+// Toute la ligne ouvre le dossier (sauf les boutons et menus de la ligne)
+document.querySelectorAll('tr.row-link').forEach(function (tr) {
+  tr.addEventListener('click', function (e) {
+    if (e.target.closest('a, button, form, .dropdown-menu, input, select')) return;
+    if (e.ctrlKey || e.metaKey) window.open(tr.dataset.href); else location.href = tr.dataset.href;
+  });
+});
+document.addEventListener("DOMContentLoaded", function () {
+  var input = document.getElementById("js-client-search");
+  var rows = document.querySelectorAll(".dossier-tr");
+  var none = document.getElementById("no-js-results");
+  var counter = document.getElementById("total-rows-count");
+  if (!input) return;
+  input.addEventListener("input", function () {
+    var q = this.value.trim().toLowerCase(), visible = 0;
+    rows.forEach(function (row) {
+      var hay = ["numero", "client", "port", "nature", "contenu", "bl", "representant"].map(function (k) { return row.getAttribute("data-" + k) || ""; }).join(" ");
+      var show = hay.indexOf(q) !== -1;
+      row.style.display = show ? "" : "none";
+      if (show) visible++;
+    });
+    if (counter) counter.textContent = visible;
+    if (none) none.style.display = visible === 0 && rows.length > 0 ? "" : "none";
+  });
+});
+</script>
+
+<%- include('../partials/footer') %>

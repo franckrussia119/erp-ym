@@ -1,0 +1,321 @@
+<%
+  const currentPath = typeof path !== 'undefined' ? path : '';
+  const hasUser = typeof user !== 'undefined' && user;
+
+  // Module courant -> couleur d'accent de la page (voir assets/css/app.css)
+  const moduleRules = [
+    ['/dossiers/archives', 'archives'], ['/archives', 'archives'],
+    ['/dashboard', 'dashboard'], ['/mon-espace', 'dashboard'], ['/dossiers', 'dossiers'],
+    ['/caisse', 'caisse'], ['/depenses', 'bons'],
+    ['/clients', 'clients'], ['/representants', 'clients'], ['/api/clients', 'clients'],
+    ['/bons', 'bons'],
+    ['/facturation', 'facturation'], ['/documents', 'facturation'],
+    ['/taches', 'taches'], ['/subtasks', 'taches'],
+    ['/analytics', 'analytics'], ['/rapports', 'analytics'], ['/accounting', 'compta'],
+    ['/fournisseurs', 'achats'], ['/commandes', 'achats'], ['/factures-fournisseur', 'achats'],
+    ['/rh', 'rh'], ['/demandes', 'bons'], ['/validation', 'dossiers'], ['/codes-tarifaires', 'dossiers'],
+    ['/admin', 'admin'], ['/logs', 'admin'], ['/profile', 'dashboard']
+  ];
+  const rule = moduleRules.find(r => currentPath === r[0] || currentPath.startsWith(r[0] + '/'));
+  const pageModule = rule ? rule[1] : 'dashboard';
+
+  const roleLabels = {
+    super_admin: 'Super Administrateur', pdg: 'Président Directeur Général', dg: 'Directeur Général',
+    dga: 'Directeur Général Adjoint', daf: 'Directeur Administratif & Financier', auditeur1: 'Auditeur interne 1',
+    auditeur2: 'Auditeur interne 2', secretariat: 'Secrétariat', secretaire: 'Secrétariat', guce: 'Service GUCE',
+    validation: 'Validation', validation_role: 'Validation', acconage: 'Service Acconage', enlevement: 'Enlèvement & Livraison',
+    facturation: 'Facturation', fiscalite: 'Fiscalité', cloture: 'Clôture', agent_payeur: 'Caisse', caisse: 'Caisse',
+    analyste: 'Analyste', comptable: 'Comptable', commercial: 'Commercial', operationnel: 'Transitaire',
+    magasinier: 'Magasinier', rh: 'Ressources humaines', lecture: 'Lecture seule', finances: 'Finances',
+    comptable_ops: 'Comptable opérations'
+  };
+
+  const sections = [
+    { title: 'Espace de travail', items: [
+      { label: 'Tableau de bord', icon: 'bi-grid-1x2-fill', href: '/dashboard', mod: 'dashboard', roles: ['*'] },
+      { label: 'Mon espace', icon: 'bi-person-workspace', href: '/mon-espace', mod: 'dashboard', roles: ['*'] },
+      { label: 'Suivi des tâches', icon: 'bi-kanban-fill', href: '/taches', mod: 'taches', roles: ['*'] },
+    ]},
+    { title: 'Opérations', items: [
+      { label: 'Dossiers de transit', icon: 'bi-folder-fill', href: '/dossiers', mod: 'dossiers', roles: ['*'] },
+      { label: 'Registre des validations', icon: 'bi-journal-check', href: '/validation/registre', mod: 'dossiers',
+        roles: ['validation', 'validation_role', 'guce', 'super_admin', 'pdg', 'dg', 'dga', 'daf', 'auditeur1', 'auditeur2', 'analyste'], hideIfLocked: true },
+      { label: 'Codes tarifaires', icon: 'bi-book', href: '/codes-tarifaires', mod: 'dossiers', roles: ['*'] },
+      { label: 'Clients & tiers', icon: 'bi-people-fill', href: '/clients', mod: 'clients', roles: ['*'] },
+      { label: 'Bons de débours', icon: 'bi-cash-coin', href: '/bons/provisoir/pending', mod: 'bons', count: typeof pendingBonsCount !== 'undefined' ? pendingBonsCount : 0,
+        roles: ['acconage', 'enlevement', 'pdg', 'dg', 'dga', 'daf', 'auditeur1', 'auditeur2', 'caisse', 'agent_payeur', 'super_admin'],
+        lockedLabel: "Réservé au service Acconage, Enlèvement et Livraison et Direction" },
+      { label: 'Visas en attente', icon: 'bi-pen-fill', href: '/bons/visas', mod: 'bons', count: typeof pendingBonsCount !== 'undefined' ? pendingBonsCount : 0,
+        roles: ['pdg', 'dg', 'dga', 'daf', 'auditeur1', 'auditeur2', 'caisse', 'agent_payeur', 'super_admin'], hideIfLocked: true },
+      { label: 'Archives', icon: 'bi-archive-fill', href: '/dossiers/archives', mod: 'archives', roles: ['*'] },
+    ]},
+    { title: 'Caisse & dépenses', items: [
+      { label: 'Caisse', icon: 'bi-safe2-fill', href: '/caisse', mod: 'caisse', count: typeof pendingBonsCount !== 'undefined' ? pendingBonsCount : 0,
+        roles: ['agent_payeur', 'caisse', 'daf', 'pdg', 'dg', 'dga', 'comptable', 'auditeur1', 'auditeur2', 'finances', 'super_admin'], hideIfLocked: true },
+      { label: 'Bons payés', icon: 'bi-journal-check', href: '/caisse/bons-payes', mod: 'caisse', count: typeof recusASaisir !== 'undefined' ? recusASaisir : 0,
+        roles: ['agent_payeur', 'caisse', 'daf', 'pdg', 'dg', 'dga', 'comptable', 'comptable_ops', 'auditeur1', 'auditeur2', 'finances', 'super_admin'], hideIfLocked: true },
+      { label: 'Dépenses internes', icon: 'bi-wallet2', href: '/depenses', mod: 'bons', roles: ['*'] },
+      { label: 'Comptes', icon: 'bi-person-lines-fill', href: '/comptes', mod: 'bons', roles: ['*'] },
+      { label: 'Demandes', icon: 'bi-inboxes', href: '/demandes', mod: 'bons', roles: ['*'], count: typeof demandesAValider !== 'undefined' ? demandesAValider : 0 },
+    ]},
+    { title: 'Ressources humaines', items: [
+      { label: 'Personnel', icon: 'bi-person-vcard', href: '/rh', mod: 'rh', roles: ['super_admin', 'pdg', 'dg', 'dga', 'daf', 'rh'], hideIfLocked: true },
+      { label: 'Paie', icon: 'bi-cash-stack', href: '/rh/paie', mod: 'rh', roles: ['super_admin', 'pdg', 'dg', 'dga', 'daf', 'rh'], hideIfLocked: true },
+      { label: 'Mes bulletins', icon: 'bi-receipt', href: '/rh/mes-bulletins', mod: 'rh', roles: ['*'] },
+    ]},
+    { title: 'Finance', items: [
+      { label: 'Factures & devis', icon: 'bi-receipt-cutoff', href: '/facturation', mod: 'facturation',
+        roles: ['finances', 'facturation', 'comptable', 'comptable_ops', 'pdg', 'dg', 'dga', 'daf', 'auditeur1', 'caisse', 'super_admin'],
+        lockedLabel: "Réservé au service Facturation et Comptabilité" },
+      { label: 'Livre journal', icon: 'bi-journal-bookmark-fill', href: '/accounting/journal', mod: 'compta',
+        roles: ['comptable', 'comptable_ops', 'daf', 'auditeur1', 'super_admin', 'caisse'],
+        lockedLabel: "Réservé à la Comptabilité et au DAF" },
+      { label: 'Pilotage & rentabilité', icon: 'bi-speedometer', href: '/rapports', mod: 'analytics',
+        roles: ['analyste', 'auditeur1', 'auditeur2', 'pdg', 'dg', 'dga', 'daf', 'comptable', 'comptable_ops', 'super_admin', 'fiscalite'],
+        lockedLabel: "Réservé aux Analystes, Auditeurs et Direction" },
+      { label: 'Résultat par service', icon: 'bi-graph-up', href: '/rapports/services', mod: 'analytics',
+        roles: ['super_admin', 'pdg', 'dg', 'dga', 'daf', 'auditeur1', 'auditeur2', 'analyste', 'comptable', 'comptable_ops', 'fiscalite', 'finances'],
+        lockedLabel: "Réservé à la Direction et à la Finance" },
+      { label: 'Analyses & rapports', icon: 'bi-bar-chart-line-fill', href: '/analytics', mod: 'analytics',
+        roles: ['analyste', 'auditeur1', 'auditeur2', 'pdg', 'dg', 'dga', 'daf', 'comptable', 'comptable_ops', 'super_admin', 'fiscalite'],
+        lockedLabel: "Réservé aux Analystes, Auditeurs et Direction" },
+    ]},
+    { title: 'Administration', items: [
+      { label: 'Utilisateurs', icon: 'bi-shield-lock-fill', href: '/admin/users', mod: 'admin', roles: ['super_admin', 'pdg', 'dg'],
+        lockedLabel: "Réservé aux Super Administrateurs et à la Direction" },
+      { label: "Circuits d'approbation", icon: 'bi-diagram-2', href: '/admin/circuits', mod: 'admin', roles: ['super_admin', 'pdg', 'dg'], hideIfLocked: true },
+      { label: 'Banques', icon: 'bi-bank', href: '/admin/banques', mod: 'admin', roles: ['super_admin', 'pdg', 'dg', 'dga', 'daf', 'comptable', 'finances'], hideIfLocked: true },
+      { label: 'Plateformes externes', icon: 'bi-box-arrow-up-right', href: '/admin/liens', mod: 'admin', roles: ['super_admin', 'pdg', 'dg'], hideIfLocked: true },
+      { label: 'Services', icon: 'bi-diagram-3', href: '/admin/services', mod: 'admin', roles: ['super_admin', 'pdg', 'dg', 'dga', 'rh'], hideIfLocked: true },
+      { label: "Journal d'activité", icon: 'bi-activity', href: '/logs', mod: 'admin', roles: ['super_admin'], hideIfLocked: true },
+      { label: 'Sauvegardes', icon: 'bi-database-check', href: '/admin/sauvegardes', mod: 'admin', roles: ['super_admin'], hideIfLocked: true },
+    ]},
+  ];
+
+  const canSee = (item) => hasUser && (item.roles.includes('*') || item.roles.includes(user.role));
+  const isActive = (item) => {
+    if (item.href === '/rapports') return currentPath === '/rapports';
+    if (item.href === '/rh') return currentPath === '/rh' || currentPath.startsWith('/rh/employes');
+    if (item.href === '/rh/paie') return currentPath.startsWith('/rh/paie') || currentPath.startsWith('/rh/bareme');
+    if (item.href === '/dashboard') return currentPath === '/dashboard';
+    if (item.href === '/dossiers') return currentPath.startsWith('/dossiers') && !currentPath.startsWith('/dossiers/archives');
+    if (item.href === '/dossiers/archives') return currentPath.startsWith('/dossiers/archives') || currentPath === '/archives';
+    if (item.href === '/bons/provisoir/pending') return currentPath.startsWith('/bons') && !currentPath.startsWith('/bons/visas');
+    if (item.href === '/caisse') return currentPath === '/caisse' || (currentPath.startsWith('/caisse/') && !currentPath.startsWith('/caisse/bons-payes'));
+    if (item.href === '/facturation') return currentPath.startsWith('/facturation') || currentPath.startsWith('/documents');
+    if (item.href === '/accounting/journal') return currentPath.startsWith('/accounting');
+    if (item.href === '/clients') return currentPath.startsWith('/clients') || currentPath.startsWith('/representants');
+    return currentPath.startsWith(item.href);
+  };
+
+  const initials = hasUser
+    ? ((user.prenom && !/^(PDG|DG|DGA|DAF)$/i.test(user.prenom) ? user.prenom[0] : '') + (user.nom || '?').split(/\s+/).map(w => w[0]).join('')).slice(0, 2).toUpperCase()
+    : '';
+
+  const quickCreate = [
+    { label: 'Nouveau dossier', icon: 'bi-folder-plus', href: '/dossiers/create', mod: 'dossiers', need: '/dossiers' },
+    { label: 'Nouveau client', icon: 'bi-person-plus', href: '/clients/create', mod: 'clients', need: '/clients' },
+    { label: 'Nouvelle facture', icon: 'bi-receipt', href: '/documents/create', mod: 'facturation', need: '/facturation' },
+    { label: 'Nouvelle tâche', icon: 'bi-check2-square', href: '/taches/create', mod: 'taches', need: '/taches' },
+  ].filter(q => {
+    const owner = sections.flatMap(s => s.items).find(i => i.href === q.need);
+    return owner && canSee(owner) && (!hasUser || user.role !== 'lecture');
+  });
+%>
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/png" href="/assets/pwa/icon-192.png">
+  <link rel="apple-touch-icon" href="/assets/pwa/apple-touch-icon.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="YM-TRANSIT">
+  <title><%= typeof title !== 'undefined' ? title + ' · YM-TRANSIT' : 'YM-TRANSIT ERP' %></title>
+  <script>
+    // Applique l'état de la barre latérale avant l'affichage (évite le clignotement)
+    try { if (localStorage.getItem('ym-side-mini') === '1') document.documentElement.classList.add('side-mini'); } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/vendor/instrument-sans/index.css">
+  <link rel="stylesheet" href="/vendor/inter/index.css">
+  <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/assets/css/app.css?v=38">
+  <link rel="stylesheet" href="/assets/css/clean.css?v=9">
+</head>
+<body data-module="<%= pageModule %>" data-uid="<%= hasUser ? user.id : '' %>">
+
+<div class="app">
+  <!-- Barre latérale -->
+  <aside class="app-sidebar" id="appSidebar" aria-label="Navigation principale">
+    <a href="/dashboard" class="side-brand">
+      <span class="brand-mark">YM</span>
+      <span class="brand-text"><strong>YM-TRANSIT</strong><small>Transit & Douane · Cameroun</small></span>
+    </a>
+
+    <nav class="side-scroll">
+      <% if (hasUser) { %>
+        <% sections.forEach(section => {
+             const visible = section.items.filter(i => canSee(i) || !i.hideIfLocked);
+             if (!visible.length) return; %>
+          <div class="side-section"><%= section.title %></div>
+          <% visible.forEach(item => { const ok = canSee(item); const on = ok && isActive(item); %>
+            <% if (ok) { %>
+              <a href="<%= item.href %>" class="side-link <%= on ? 'active' : '' %>" style="--item: var(--c-<%= item.mod %>)" title="<%= item.label %>">
+                <span class="ico"><i class="bi <%= item.icon %>"></i></span>
+                <span><%= item.label %></span>
+                <% if (item.count) { %><em class="count"><%= item.count > 99 ? '99+' : item.count %></em><% } %>
+              </a>
+            <% } else { %>
+              <a href="#" class="side-link locked" style="--item: var(--c-<%= item.mod %>)" title="<%= item.lockedLabel || 'Accès restreint' %>"
+                 data-locked-label="<%= item.label %>" data-locked-reason="<%= item.lockedLabel || '' %>">
+                <span class="ico"><i class="bi <%= item.icon %>"></i></span>
+                <span><%= item.label %></span>
+                <i class="bi bi-lock-fill lock"></i>
+              </a>
+            <% } %>
+          <% }) %>
+        <% }) %>
+        <% const liens = typeof liensExternes !== 'undefined' ? liensExternes : []; if (liens.length) { %>
+          <div class="side-section">Autres plateformes</div>
+          <% liens.forEach(l => { %>
+            <a href="<%= l.url %>" target="_blank" rel="noopener" class="side-link side-ext" title="<%= l.nom %> (nouvel onglet)">
+              <span class="ico"><i class="bi <%= l.icone %>"></i></span>
+              <span><%= l.nom %></span>
+              <i class="bi bi-box-arrow-up-right ext"></i>
+            </a>
+          <% }) %>
+        <% } %>
+      <% } %>
+    </nav>
+
+    <div class="side-foot">
+      <span class="ver">YM-TRANSIT ERP · v2.0</span>
+      <button class="side-collapse" type="button" id="sideCollapseBtn" title="Réduire le menu" aria-label="Réduire le menu">
+        <i class="bi bi-chevron-double-left"></i>
+      </button>
+    </div>
+  </aside>
+  <div class="side-overlay" id="sideOverlay"></div>
+
+  <div class="app-main">
+    <!-- Bandeau supérieur -->
+    <header class="app-topbar">
+      <button class="icon-btn top-burger" type="button" id="sideOpenBtn" aria-label="Ouvrir le menu"><i class="bi bi-list"></i></button>
+
+      <% if (hasUser) { %>
+        <div class="top-search" id="topSearch">
+          <i class="bi bi-search"></i>
+          <input type="search" id="globalSearch" placeholder="Rechercher un dossier, un client, une facture…" autocomplete="off" aria-label="Recherche globale">
+          <kbd>Ctrl K</kbd>
+          <div class="search-panel" id="searchPanel" role="listbox"></div>
+        </div>
+      <% } %>
+
+      <div class="top-actions">
+        <% if (hasUser) { %>
+          <% if (quickCreate.length) { %>
+            <div class="dropdown">
+              <button class="btn btn-primary btn-create" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-plus-lg"></i><span>Créer</span>
+              </button>
+              <ul class="dropdown-menu dropdown-menu-end" style="min-width: 230px;">
+                <li><div class="dropdown-header">Création rapide</div></li>
+                <% quickCreate.forEach(q => { %>
+                  <li><a class="dropdown-item" href="<%= q.href %>">
+                    <span class="d-inline-grid rounded-3" style="width:28px;height:28px;place-items:center;color:var(--c-<%= q.mod %>);background:color-mix(in srgb, var(--c-<%= q.mod %>) 12%, white)"><i class="bi <%= q.icon %>"></i></span>
+                    <%= q.label %>
+                  </a></li>
+                <% }) %>
+              </ul>
+            </div>
+          <% } %>
+
+          <div class="dropdown">
+            <button class="icon-btn" type="button" id="notifDropdownBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notifications">
+              <i class="bi bi-bell"></i>
+              <span class="dot" id="notif-badge">0</span>
+            </button>
+            <div class="dropdown-menu dropdown-menu-end notif-menu" aria-labelledby="notifDropdownBtn">
+              <div class="notif-head">
+                <b>Notifications</b>
+                <button type="button" class="btn btn-sm btn-link text-decoration-none p-0" id="notifReadAll">Tout marquer lu</button>
+              </div>
+              <div class="push-prompt" id="pushPrompt" hidden>
+                <span class="pp-ico"><i class="bi bi-phone-vibrate"></i></span>
+                <span class="flex-grow-1 small">Recevez les alertes sur cet appareil, même application fermée.</span>
+                <button type="button" class="btn btn-primary btn-sm" data-push-enable>Activer</button>
+              </div>
+              <div class="notif-list" id="notif-list-container">
+                <div class="empty-state py-4"><div class="spinner-border spinner-border-sm text-primary"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="dropdown">
+            <button class="user-chip" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+              <span class="avatar"><%= initials %></span>
+              <span class="who"><b><%= [user.prenom && !/^(PDG|DG|DGA|DAF)$/i.test(user.prenom) ? user.prenom : '', user.nom].filter(Boolean).join(' ') %></b><small><%= roleLabels[user.role] || user.role %></small></span>
+              <i class="bi bi-chevron-down small text-muted"></i>
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end" style="min-width: 240px;">
+              <li class="px-2 py-2 d-flex align-items-center gap-2">
+                <span class="avatar"><%= initials %></span>
+                <span class="lh-sm"><b class="d-block text-dark small"><%= user.nom %></b><small class="text-muted"><%= user.email %></small></span>
+              </li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item" href="/profile"><i class="bi bi-person-gear"></i>Mon profil</a></li>
+              <li><a class="dropdown-item" href="/taches/mine"><i class="bi bi-list-check"></i>Mes tâches</a></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><button type="button" class="dropdown-item" id="installAppItem" hidden><i class="bi bi-download"></i>Installer l'application</button></li>
+              <li><button type="button" class="dropdown-item" id="pushToggleItem" hidden><i class="bi bi-bell"></i><span>Notifications sur cet appareil</span></button></li>
+              <li><hr class="dropdown-divider"></li>
+              <li><a class="dropdown-item text-danger" href="/logout"><i class="bi bi-box-arrow-right"></i>Se déconnecter</a></li>
+            </ul>
+          </div>
+        <% } else { %>
+          <a href="/login" class="btn btn-primary btn-sm">Connexion</a>
+        <% } %>
+      </div>
+    </header>
+
+    <!-- Messages flash affichés en notifications discrètes -->
+    <div class="toast-stack" id="toastStack" aria-live="polite">
+      <% if (typeof error_msg !== 'undefined' && error_msg && error_msg.length > 0) { %>
+        <div class="flash-toast err" data-timeout="9000">
+          <span class="ti"><i class="bi bi-exclamation-octagon-fill"></i></span>
+          <div class="tx"><b>Action impossible</b><%= error_msg %></div>
+          <button class="x" type="button" aria-label="Fermer">&times;</button>
+        </div>
+      <% } %>
+      <%# une erreur l'emporte : jamais « C'est fait » quand l'action a été refusée ou est incomplète %>
+      <% if (typeof success_msg !== 'undefined' && success_msg && success_msg.length > 0 && !(typeof error_msg !== 'undefined' && error_msg)) { %>
+        <div class="flash-toast ok" data-timeout="5000">
+          <span class="ti"><i class="bi bi-check-circle-fill"></i></span>
+          <div class="tx"><b>C'est fait</b><%= success_msg %></div>
+          <button class="x" type="button" aria-label="Fermer">&times;</button>
+        </div>
+      <% } %>
+    </div>
+
+    <!-- Fenêtre "section verrouillée" -->
+    <div class="modal fade" id="accessDeniedModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content text-center">
+          <div class="modal-body p-4">
+            <div class="empty-state p-0">
+              <div class="es-ico" style="color:#dc2626;background:#fee2e2"><i class="bi bi-lock-fill"></i></div>
+              <h5 class="mb-1" id="lockedSectionName">Section</h5>
+              <p class="text-muted small mb-3" id="lockedSectionReason">Cette section est réservée.</p>
+              <button type="button" class="btn btn-light w-100" data-bs-dismiss="modal">Compris</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main class="app-content">

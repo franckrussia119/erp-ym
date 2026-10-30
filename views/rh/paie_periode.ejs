@@ -1,0 +1,105 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const full = (e) => [e.nom, e.prenom].filter(Boolean).join(' ');
+  const draft = p.statut === 'BROUILLON';
+  const ST = { BROUILLON: ['En préparation', 'warning', 'bi-pencil-square'], VALIDEE: ['Validée, à payer', 'primary', 'bi-patch-check'], PAYEE: ['Payée', 'success', 'bi-check-circle-fill'] }[p.statut];
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-cash-stack"></i></span>
+  <div class="flex-grow-1">
+    <h1>Paie de <%= periodeLabel(p) %></h1>
+    <p class="mb-0"><%= lignes.length %> bulletin<%= lignes.length > 1 ? 's' : '' %> · <span class="badge text-bg-<%= ST[1] %>"><i class="bi <%= ST[2] %> me-1"></i><%= ST[0] %></span><% if (validePar) { %> · validée par <%= [validePar.prenom, validePar.nom].filter(Boolean).join(' ') %> le <%= new Date(p.valide_at).toLocaleDateString('fr-FR') %><% } %></p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/rh/paie"><i class="bi bi-arrow-left me-1"></i>Paie</a>
+    <div class="dropdown d-inline-block">
+      <button class="btn btn-light btn-sm dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-download me-1"></i>Exporter</button>
+      <div class="dropdown-menu dropdown-menu-end">
+        <a class="dropdown-item" href="/rh/paie/<%= p.id %>/export?type=livre">Livre de paie (Excel)</a>
+        <a class="dropdown-item" href="/rh/paie/<%= p.id %>/export?type=virements">Ordre de virement (Excel)</a>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('_nav') %>
+
+<div class="row g-3 mb-3 kpi-compact">
+  <% [['Brut', t.brut, 'bi-cash', 'var(--step-3)'], ['Retenues salariales', t.cnps + t.impots, 'bi-dash-circle', 'var(--step-5)'], ['Net à payer', t.net, 'bi-wallet2', 'var(--c-facturation)'], ['Charges patronales', t.patronal, 'bi-building', 'var(--c-compta)'], ['Coût total', t.cout, 'bi-graph-up', 'var(--c-dashboard)']].forEach(([l, v, i, c]) => { %>
+    <div class="col-6 col-md-4 col-xl"><div class="kpi h-100" style="--k: <%= c %>"><span class="k-ico"><i class="bi <%= i %>"></i></span><div class="k-label"><%= l %></div><div class="k-value"><%= F(v) %> <small>F</small></div></div></div>
+  <% }) %>
+</div>
+
+<div class="rh-actions mb-3">
+  <% if (draft) { %>
+    <span class="small text-muted flex-grow-1"><i class="bi bi-info-circle me-1"></i>Cliquez sur un employé pour saisir ses primes du mois, absences et avance à retenir.</span>
+    <form method="POST" action="/rh/paie/<%= p.id %>/actualiser"><button class="btn btn-light btn-sm"><i class="bi bi-arrow-repeat me-1"></i>Recalculer depuis les dossiers</button></form>
+    <form method="POST" action="/rh/paie/<%= p.id %>/supprimer" onsubmit="return confirm('Supprimer cette paie en préparation ?')"><button class="btn btn-light btn-sm text-danger"><i class="bi bi-trash me-1"></i>Supprimer</button></form>
+    <% if (canValidate) { %>
+      <form method="POST" action="/rh/paie/<%= p.id %>/valider" onsubmit="return confirm('Valider la paie de <%= periodeLabel(p) %> ? Les bulletins ne seront plus modifiables et l\'écriture de paie sera passée en comptabilité.')"><button class="btn btn-success btn-sm"><i class="bi bi-patch-check me-1"></i>Valider la paie</button></form>
+    <% } else { %><span class="badge text-bg-light border">À faire valider par le DAF, le DG ou le PDG</span><% } %>
+  <% } else if (p.statut === 'VALIDEE') { %>
+    <span class="small text-muted flex-grow-1">L'écriture de paie est passée au journal PAI. Une fois les salaires versés, marquez la paie payée.</span>
+    <% if (canValidate) { %>
+      <form class="d-flex gap-2" method="POST" action="/rh/paie/<%= p.id %>/payer" onsubmit="return confirm('Confirmer le paiement des salaires (<%= F(t.net) %> F) ?')">
+        <select name="mode" class="form-select form-select-sm w-auto"><option value="VIREMENT">Par virement</option><option value="ESPECES">En espèces (caisse)</option></select>
+        <button class="btn btn-success btn-sm"><i class="bi bi-check2-all me-1"></i>Marquer payée</button>
+      </form>
+    <% } %>
+  <% } else { %>
+    <span class="small text-muted">Payée le <%= new Date(p.paye_at).toLocaleDateString('fr-FR') %> (<%= (MODES[p.mode] || p.mode || '').toLowerCase() %>).</span>
+  <% } %>
+</div>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 rh-table">
+      <thead><tr><th>Employé</th><th class="text-end">Base</th><th class="text-end">Primes</th><th class="text-end">Brut</th><th class="text-end">CNPS</th><th class="text-end">Impôts</th><th class="text-end">Avance</th><th class="text-end">Net</th><th class="text-end">Coût</th><th></th></tr></thead>
+      <tbody>
+        <% lignes.forEach(l => { const pr = l.primes.reduce((s, x) => s + x.montant, 0); %>
+          <tr id="b<%= l.id %>">
+            <td><b><%= full(l.employe) %></b><div class="small text-muted"><%= l.employe.matricule %><%= l.employe.poste ? ' · ' + l.employe.poste : '' %><%= l.jours_absence ? ' · ' + String(l.jours_absence).replace('.', ',') + ' j d\'absence' : '' %></div></td>
+            <td class="text-end"><%= F(l.salaire_base) %></td>
+            <td class="text-end"><%= pr ? F(pr) : '—' %></td>
+            <td class="text-end"><%= F(l.d.brut) %></td>
+            <td class="text-end">−<%= F(l.d.cnps_salarie) %></td>
+            <td class="text-end">−<%= F(l.d.irpp + l.d.cac + l.d.cfc + l.d.rav + l.d.tdl) %></td>
+            <td class="text-end"><%= l.d.avance ? '−' + F(l.d.avance) : '—' %></td>
+            <td class="text-end fw-bold"><%= F(l.d.net) %></td>
+            <td class="text-end text-muted"><%= F(l.d.cout_total) %></td>
+            <td class="text-end text-nowrap">
+              <a class="btn btn-light btn-sm" href="/rh/bulletins/<%= l.id %>" target="_blank" title="Bulletin"><i class="bi bi-file-earmark-text"></i></a>
+              <% if (draft) { %><button class="btn btn-light btn-sm" data-bs-toggle="modal" data-bs-target="#bm<%= l.id %>" title="Modifier"><i class="bi bi-pencil"></i></button><% } %>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+      <tfoot><tr class="fw-bold"><td>Total</td><td></td><td></td><td class="text-end"><%= F(t.brut) %></td><td class="text-end">−<%= F(t.cnps) %></td><td class="text-end">−<%= F(t.impots) %></td><td class="text-end"><%= t.avance ? '−' + F(t.avance) : '—' %></td><td class="text-end"><%= F(t.net) %></td><td class="text-end"><%= F(t.cout) %></td><td></td></tr></tfoot>
+    </table>
+  </div>
+</div>
+
+<% if (draft) { lignes.forEach(l => { %>
+  <div class="modal fade" id="bm<%= l.id %>" tabindex="-1">
+    <div class="modal-dialog modal-lg"><form class="modal-content ops-form" method="POST" action="/rh/paie/<%= p.id %>/bulletins/<%= l.id %>">
+      <div class="modal-header"><h5 class="modal-title"><%= full(l.employe) %> · <span><%= periodeLabel(p) %></span></h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-4"><label class="form-label">Salaire de base (F)</label><input type="number" min="0" name="salaire_base" class="form-control text-end" value="<%= l.salaire_base %>"></div>
+          <div class="col-4"><label class="form-label">Jours d'absence non payés</label><input type="number" min="0" max="31" step="0.5" name="jours_absence" class="form-control text-end" value="<%= l.jours_absence %>"></div>
+          <div class="col-4"><label class="form-label">Avance à retenir (F)</label><input type="number" min="0" name="avance" class="form-control text-end" value="<%= l.avance || '' %>"></div>
+        </div>
+        <label class="form-label">Primes et indemnités du mois</label>
+        <%- include('_primes', { primes: l.primes }) %>
+        <div class="form-text">Les primes fixes du dossier sont déjà là ; ajoutez les primes du mois (heures supplémentaires, rendement…). Les remboursements de frais sont « non imposables ».</div>
+      </div>
+      <div class="modal-footer">
+        <button type="submit" form="rm<%= l.id %>" class="btn btn-link text-danger me-auto" onclick="return confirm('Retirer ce bulletin de la paie du mois ?')">Retirer de cette paie</button>
+        <button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button>
+        <button class="btn btn-primary">Recalculer le bulletin</button>
+      </div>
+    </form></div>
+  </div>
+  <form id="rm<%= l.id %>" method="POST" action="/rh/paie/<%= p.id %>/retirer/<%= l.id %>"></form>
+<% }) } %>
+<%- include('../partials/footer') %>

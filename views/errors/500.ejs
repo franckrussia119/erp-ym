@@ -1,0 +1,17 @@
+<%- include('../partials/header') %>
+
+<div class="err-page err-500">
+  <div class="err-code">500</div>
+  <span class="err-ico"><i class="bi bi-bug"></i></span>
+  <h1 class="h3 mb-2">Une erreur est survenue</h1>
+  <p class="text-muted mb-4">Le serveur n'a pas pu traiter la demande. Réessayez dans un instant ; si le problème persiste, prévenez l'administrateur.</p>
+  <% if (process.env.NODE_ENV !== 'production' && typeof error !== 'undefined' && error) { %>
+    <pre class="err-trace"><%= error.stack || error.message || error %></pre>
+  <% } %>
+  <div class="d-flex justify-content-center gap-2 flex-wrap">
+    <a href="/dashboard" class="btn btn-primary"><i class="bi bi-grid-1x2 me-2"></i>Tableau de bord</a>
+    <a href="javascript:history.back()" class="btn btn-light"><i class="bi bi-arrow-left me-2"></i>Retour</a>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

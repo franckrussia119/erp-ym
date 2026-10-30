@@ -1,0 +1,20 @@
+<%# Discussion attachée à une fiche. Paramètres : cible ("demande", "bon", "client"), cibleId, titre (facultatif) %>
+<section class="card fil" id="fil" data-fil="<%= cible %>:<%= cibleId %>">
+  <div class="card-header d-flex align-items-center gap-2">
+    <i class="bi bi-chat-dots"></i><span class="flex-grow-1"><%= typeof titre !== 'undefined' && titre ? titre : 'Discussion' %></span>
+    <small class="text-muted" data-fil-count></small>
+  </div>
+  <div class="fil-list" data-fil-list><div class="fil-empty">Chargement…</div></div>
+  <form class="fil-compose" data-fil-form hidden>
+    <div class="fil-tray" data-fil-tray hidden></div>
+    <div class="fil-row">
+      <label class="fil-btn" title="Joindre une photo, une vidéo ou un document"><i class="bi bi-paperclip"></i><input type="file" multiple hidden data-fil-files></label>
+      <div class="fil-input">
+        <textarea rows="1" maxlength="4000" placeholder="Écrire un message… (@ pour mentionner)" data-fil-text></textarea>
+        <div class="fil-mentions" data-fil-mentions hidden></div>
+      </div>
+      <button class="fil-btn send" title="Envoyer" data-fil-send><i class="bi bi-send-fill"></i></button>
+    </div>
+    <div class="fil-progress" data-fil-progress hidden><i></i></div>
+  </form>
+</section>

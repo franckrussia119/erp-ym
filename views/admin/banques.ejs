@@ -1,0 +1,52 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-bank"></i></span>
+  <div class="flex-grow-1">
+    <h1>Banques</h1>
+    <p class="mb-0">Les banques avec lesquelles la société travaille. On les choisit dans une liste pour le paiement des droits (facture 1) et les sorties de caisse vers la banque.</p>
+  </div>
+</div>
+<div class="row g-4">
+  <div class="col-lg-8">
+    <div class="card"><div class="table-responsive">
+      <table class="table align-middle mb-0">
+        <thead><tr><th>Banque</th><th>N° de compte</th><th>Agence</th><th>État</th><th></th></tr></thead>
+        <tbody>
+          <% if (!banques.length) { %><tr><td colspan="5" class="text-center text-muted py-4">Aucune banque : ajoutez-en une à droite.</td></tr><% } %>
+          <% banques.forEach(b => { %>
+            <tr class="<%= b.actif ? '' : 'text-muted' %>">
+              <td class="fw-semibold"><%= b.nom %></td>
+              <td class="font-monospace small"><%= b.numero_compte || '—' %></td>
+              <td class="small"><%= b.agence || '—' %></td>
+              <td><span class="badge <%= b.actif ? 'text-bg-success' : 'text-bg-secondary' %>"><%= b.actif ? 'Utilisée' : 'Retirée' %></span></td>
+              <td class="text-end text-nowrap"><button class="btn btn-sm btn-link p-0" type="button" data-bs-toggle="collapse" data-bs-target="#bq<%= b.id %>" aria-label="Modifier"><i class="bi bi-pencil"></i></button></td>
+            </tr>
+            <tr class="collapse" id="bq<%= b.id %>"><td colspan="5">
+              <form method="POST" action="/admin/banques/<%= b.id %>" class="row g-2">
+                <div class="col-md-4"><input name="nom" class="form-control form-control-sm" value="<%= b.nom %>" required></div>
+                <div class="col-md-3"><input name="numero_compte" class="form-control form-control-sm" value="<%= b.numero_compte || '' %>" placeholder="N° de compte"></div>
+                <div class="col-md-3"><input name="agence" class="form-control form-control-sm" value="<%= b.agence || '' %>" placeholder="Agence"></div>
+                <div class="col-md-2 d-flex gap-1">
+                  <button class="btn btn-primary btn-sm flex-grow-1">OK</button>
+                  <button class="btn btn-light btn-sm" name="actif" value="<%= b.actif ? '0' : '1' %>" title="<%= b.actif ? 'Retirer de la liste' : 'Remettre dans la liste' %>"><i class="bi <%= b.actif ? 'bi-eye-slash' : 'bi-eye' %>"></i></button>
+                </div>
+              </form>
+            </td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card"><div class="card-header"><i class="bi bi-plus-lg me-2"></i>Ajouter une banque</div><div class="card-body">
+      <form method="POST" action="/admin/banques" class="d-grid gap-2">
+        <input name="nom" class="form-control" placeholder="Nom de la banque" required>
+        <input name="numero_compte" class="form-control" placeholder="N° de compte (facultatif)">
+        <input name="agence" class="form-control" placeholder="Agence (facultatif)">
+        <button class="btn btn-primary">Ajouter</button>
+      </form>
+      <p class="small text-muted mt-3 mb-0">Une banque retirée n'est plus proposée, mais les opérations passées gardent son nom.</p>
+    </div></div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

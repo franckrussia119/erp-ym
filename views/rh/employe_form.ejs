@@ -1,0 +1,53 @@
+<%- include('../partials/header') %>
+<%
+  const v = (k) => e && e[k] != null ? e[k] : '';
+  const dv = (k) => e && e[k] ? new Date(e[k]).toISOString().slice(0, 10) : '';
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-person-vcard"></i></span>
+  <div class="flex-grow-1">
+    <h1><%= e ? 'Modifier le dossier' : 'Nouvel employé' %></h1>
+    <p class="mb-0"><%= e ? e.matricule + ' · ' + [e.prenom, e.nom].filter(Boolean).join(' ') : 'Le matricule est attribué automatiquement.' %></p>
+  </div>
+  <a class="btn btn-light btn-sm" href="<%= e ? '/rh/employes/' + e.id : '/rh/employes' %>"><i class="bi bi-arrow-left me-1"></i>Retour</a>
+</div>
+<%- include('_nav') %>
+<form method="POST" action="<%= e ? '/rh/employes/' + e.id : '/rh/employes' %>" class="ops-form">
+  <div class="row g-4">
+    <div class="col-lg-6">
+      <div class="card mb-4"><div class="card-header"><i class="bi bi-person me-2"></i>Identité</div><div class="card-body row g-2">
+        <div class="col-6"><label class="form-label">Nom <span class="text-danger">*</span></label><input name="nom" class="form-control" required value="<%= v('nom') %>"></div>
+        <div class="col-6"><label class="form-label">Prénom</label><input name="prenom" class="form-control" value="<%= v('prenom') %>"></div>
+        <div class="col-6"><label class="form-label">Sexe</label><select name="sexe" class="form-select"><option value="">—</option><option value="M" <%= v('sexe') === 'M' ? 'selected' : '' %>>Homme</option><option value="F" <%= v('sexe') === 'F' ? 'selected' : '' %>>Femme</option></select></div>
+        <div class="col-6"><label class="form-label">Date de naissance</label><input type="date" name="date_naissance" class="form-control" value="<%= dv('date_naissance') %>"></div>
+        <div class="col-6"><label class="form-label">Téléphone</label><input name="telephone" class="form-control" value="<%= v('telephone') %>"></div>
+        <div class="col-6"><label class="form-label">E-mail</label><input type="email" name="email" class="form-control" value="<%= v('email') %>"></div>
+        <div class="col-12"><label class="form-label">Adresse</label><input name="adresse" class="form-control" value="<%= v('adresse') %>"></div>
+        <div class="col-6"><label class="form-label">Situation familiale</label><select name="situation" class="form-select"><option value="">—</option><% Object.entries(SITUATIONS).forEach(([k, l]) => { %><option value="<%= k %>" <%= v('situation') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+        <div class="col-6"><label class="form-label">Enfants à charge</label><input type="number" min="0" name="enfants" class="form-control" value="<%= v('enfants') || 0 %>"></div>
+        <div class="col-6"><label class="form-label">N° CNPS</label><input name="cnps_numero" class="form-control" value="<%= v('cnps_numero') %>"></div>
+        <div class="col-6"><label class="form-label">NIU (impôts)</label><input name="niu" class="form-control" value="<%= v('niu') %>"></div>
+      </div></div>
+    </div>
+    <div class="col-lg-6">
+      <div class="card mb-4"><div class="card-header"><i class="bi bi-briefcase me-2"></i>Poste et contrat</div><div class="card-body row g-2">
+        <div class="col-6"><label class="form-label">Poste</label><input name="poste" class="form-control" value="<%= v('poste') %>" placeholder="ex. Déclarant en douane"></div>
+        <div class="col-6"><label class="form-label">Service</label><select name="departement_id" class="form-select"><option value="">Aucun</option><% services.forEach(s => { %><option value="<%= s.id %>" <%= e && e.departement_id === s.id ? 'selected' : '' %>><%= s.nom %></option><% }) %></select></div>
+        <div class="col-6"><label class="form-label">Contrat</label><select name="type_contrat" class="form-select"><% Object.entries(CONTRATS).forEach(([k, l]) => { %><option value="<%= k %>" <%= v('type_contrat') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+        <div class="col-6"><label class="form-label">Catégorie / échelon</label><input name="categorie" class="form-control" value="<%= v('categorie') %>"></div>
+        <div class="col-6"><label class="form-label">Date d'embauche</label><input type="date" name="date_embauche" class="form-control" value="<%= dv('date_embauche') %>"></div>
+        <div class="col-6"><label class="form-label">Fin de contrat</label><input type="date" name="date_fin_contrat" class="form-control" value="<%= dv('date_fin_contrat') %>"><div class="form-text">CDD, essai, stage</div></div>
+        <div class="col-6"><label class="form-label">Congés reportés (jours)</label><input type="number" min="0" step="0.5" name="conges_report" class="form-control" value="<%= v('conges_report') || 0 %>"><div class="form-text">Solde à l'ouverture du dossier</div></div>
+      </div></div>
+      <div class="card mb-4"><div class="card-header"><i class="bi bi-cash-coin me-2"></i>Salaire et paiement</div><div class="card-body row g-2">
+        <div class="col-6"><label class="form-label">Salaire de base mensuel (F)</label><input type="number" min="0" step="1" name="salaire_base" class="form-control text-end" value="<%= v('salaire_base') || '' %>"></div>
+        <div class="col-6"><label class="form-label">Mode de paiement</label><select name="mode_paiement" class="form-select"><% Object.entries(MODES).forEach(([k, l]) => { %><option value="<%= k %>" <%= v('mode_paiement') === k ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+        <div class="col-6"><label class="form-label">Banque</label><input name="banque" class="form-control" value="<%= v('banque') %>"></div>
+        <div class="col-6"><label class="form-label">RIB / n° de compte</label><input name="rib" class="form-control" value="<%= v('rib') %>"></div>
+        <div class="col-12"><label class="form-label">Primes et indemnités fixes (chaque mois)</label><%- include('_primes', { primes }) %></div>
+      </div></div>
+    </div>
+  </div>
+  <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Enregistrer le dossier</button>
+</form>
+<%- include('../partials/footer') %>

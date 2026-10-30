@@ -1,0 +1,23 @@
+<form action="/bons/provisoir" method="POST" enctype="multipart/form-data" class="bp-form" data-lines-form>
+  <input type="hidden" name="dossier_id" value="<%= dossier.id %>">
+  <input type="hidden" name="items_json" value="[]" data-items-json>
+  <input type="hidden" name="montant_demande" value="0" data-total-input>
+  <div class="row g-2 ops-form mb-2">
+    <div class="col-md-7"><label class="form-label">Objet <span class="text-danger">*</span></label><input type="text" name="objet" class="form-control form-control-sm" placeholder="ex. Frais d'acconage et manutention" required></div>
+    <div class="col-md-5"><%- include('../partials/_urgence') %></div>
+    <div class="col-12"><label class="form-label">Proforma ou devis (PDF, facultatif)</label><input type="file" name="pdf_file" class="form-control form-control-sm" accept=".pdf"></div>
+  </div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-1 lines-table">
+      <thead><tr><th>Désignation</th><th class="text-end" style="width:9.5rem">Montant (F)</th><th style="width:2.5rem"></th></tr></thead>
+      <tbody>
+        <tr data-line><td><input class="form-control form-control-sm" data-des placeholder="ex. Manutention" required></td><td><input type="number" min="0" class="form-control form-control-sm text-end" data-amt required></td><td><button type="button" class="btn btn-sm btn-link text-danger p-0" data-del aria-label="Supprimer la ligne"><i class="bi bi-trash"></i></button></td></tr>
+      </tbody>
+      <tfoot><tr class="fw-bold"><td class="text-end">Total</td><td class="text-end"><span data-total>0</span> F</td><td></td></tr></tfoot>
+    </table>
+  </div>
+  <div class="d-flex justify-content-between align-items-center">
+    <button type="button" class="btn btn-light btn-sm" data-add><i class="bi bi-plus-lg me-1"></i>Ajouter une ligne</button>
+    <button type="submit" class="btn btn-success btn-sm px-3"><i class="bi bi-send me-1"></i>Émettre le bon provisoire</button>
+  </div>
+</form>

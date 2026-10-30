@@ -1,0 +1,38 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-box-arrow-up-right"></i></span>
+  <div class="flex-grow-1">
+    <h1>Plateformes externes</h1>
+    <p class="mb-0">Les autres applications de l'entreprise, par exemple la plateforme de gestion des camions. Elles apparaissent dans le menu et s'ouvrent dans un nouvel onglet.</p>
+  </div>
+</div>
+<form class="card" method="POST" action="/admin/liens" data-liens>
+  <div class="card-body">
+    <div data-rows>
+      <% (liens.length ? liens : [{ nom: 'Transport (camions)', url: '', icone: 'bi-truck' }]).forEach(l => { %>
+        <div class="row g-2 align-items-end lien-row" data-row>
+          <div class="col-md-3"><label class="form-label small">Nom dans le menu</label><input name="nom" class="form-control" maxlength="40" value="<%= l.nom %>" placeholder="Transport (camions)"></div>
+          <div class="col-md-6"><label class="form-label small">Adresse (URL)</label><input name="url" type="url" class="form-control" value="<%= l.url %>" placeholder="https://transport.votre-domaine.com"></div>
+          <div class="col-8 col-md-2"><label class="form-label small">Icône</label>
+            <select name="icone" class="form-select"><% icons.forEach(ic => { %><option value="<%= ic %>" <%= l.icone === ic ? 'selected' : '' %>><%= ic.replace('bi-', '') %></option><% }) %></select></div>
+          <div class="col-4 col-md-1 text-end"><button type="button" class="btn btn-light" data-del title="Retirer"><i class="bi bi-trash"></i></button></div>
+        </div>
+      <% }) %>
+    </div>
+    <button type="button" class="btn btn-light btn-sm mt-3" data-add><i class="bi bi-plus-lg me-1"></i>Ajouter une plateforme</button>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <small class="text-muted">Visibles par tous les employés connectés. Laissez l'adresse vide pour retirer un lien.</small>
+    <button class="btn btn-primary"><i class="bi bi-check-lg me-1"></i>Enregistrer</button>
+  </div>
+</form>
+<script>
+(function () {
+  var f = document.querySelector('[data-liens]'), rows = f.querySelector('[data-rows]');
+  f.addEventListener('click', function (e) {
+    if (e.target.closest('[data-add]')) { var r = rows.lastElementChild.cloneNode(true); r.querySelectorAll('input').forEach(function (i) { i.value = ''; }); rows.appendChild(r); r.querySelector('input').focus(); }
+    var d = e.target.closest('[data-del]'); if (d) { var row = d.closest('[data-row]'); if (rows.children.length > 1) row.remove(); else row.querySelectorAll('input').forEach(function (i) { i.value = ''; }); }
+  });
+})();
+</script>
+<%- include('../partials/footer') %>

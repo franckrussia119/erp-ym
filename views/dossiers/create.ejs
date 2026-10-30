@@ -1,0 +1,380 @@
+<%- include('../partials/header') %>
+<%
+  const steps = [
+    { k: 'client', label: 'Client', icon: 'bi-person' },
+    { k: 'expedition', label: 'Expédition', icon: 'bi-ship' },
+    { k: 'conteneurs', label: 'Conteneurs', icon: 'bi-box-seam' },
+    { k: 'pieces', label: 'Pièces', icon: 'bi-paperclip' },
+    { k: 'douane', label: 'Douane & fisc', icon: 'bi-shield-check' },
+    { k: 'recap', label: 'Vérifier', icon: 'bi-check2-circle' },
+  ];
+  const docs = [
+    { f: 'fichier_bl', n: 'bl', label: 'Connaissement (BL)', req: true, ph: 'N° BL, ex. MEDU1234567' },
+    { f: 'fichier_fac', n: 'fac_numero', label: 'Facture commerciale', req: true, ph: 'N° de facture fournisseur' },
+    { f: 'fichier_sgs', n: 'sgs_numero', label: 'Attestation SGS', ph: 'N° rapport SGS' },
+    { f: 'fichier_di', n: 'di_numero', label: "Déclaration d'importation (DI)", ph: 'N° DI' },
+    { f: 'fichier_besc', n: 'besc_numero', label: 'BESC', ph: 'N° BESC' },
+    { f: 'fichier_anor', n: 'anor_numero', label: 'Certificat ANOR', ph: 'N° ANOR' },
+  ];
+%>
+
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-folder-plus"></i></span>
+  <div class="flex-grow-1">
+    <h1>Nouveau dossier</h1>
+    <p class="mb-0">Remplissez chaque étape puis passez à la suivante. Rien n'est enregistré avant la dernière étape.</p>
+  </div>
+  <a href="/dossiers" class="btn btn-light"><i class="bi bi-x-lg me-1"></i>Annuler</a>
+</div>
+
+<ol class="wiz-steps" id="wizSteps">
+  <% steps.forEach((s, i) => { %>
+    <li data-step="<%= i %>" class="<%= i === 0 ? 'now' : '' %>"><button type="button" data-goto="<%= i %>"><span class="ws-n"><%= i + 1 %></span><span class="ws-l"><%= s.label %></span></button></li>
+  <% }) %>
+</ol>
+
+<form action="/dossiers/create" method="POST" enctype="multipart/form-data" id="wizForm" novalidate>
+  <input type="hidden" name="conteneurs_json" id="conteneurs_json" value="[]">
+
+  <!-- 1. CLIENT -->
+  <section class="card wiz-pane" data-pane="0">
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-person"></i>Client et référence du dossier</h5>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Client <span class="text-danger">*</span></label>
+          <select class="form-select" id="client_id" name="client_id" required>
+            <option value="">Choisissez un client</option>
+            <% (clients || []).forEach(cl => { %><option value="<%= cl.id %>"><%= cl.nom %></option><% }) %>
+          </select>
+          <div class="form-text">Client absent ? <a href="/clients/create" target="_blank">Créer la fiche client</a></div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Nom du dossier</label>
+          <div class="form-control bg-light fw-bold" id="dossierNamePreview">Choisissez un client</div>
+          <div class="form-text">Le dossier porte le nom du client, avec le BL et le contenu en dessous.</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Représentant du client</label>
+          <select class="form-select" id="representant_id" name="representant_id"><option value="">Aucun</option></select>
+          <div class="form-text" id="add-rep-link-container" style="display:none"><a href="#" id="add-rep-link" target="_blank"><i class="bi bi-plus-circle me-1"></i>Ajouter un représentant</a></div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Ou nom libre du représentant</label>
+          <input type="text" class="form-control" name="representant" placeholder="Si absent de la liste">
+        </div>
+        <div class="col-12">
+          <div class="kv-grid" id="clientInfo">
+            <div><span>NIU</span><b id="display-niu">—</b></div>
+            <div><span>ACF</span><b id="display-acf">—</b></div>
+          </div>
+          <div class="small mt-2" id="client-docs"></div>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Commentaire sur le client</label>
+          <textarea name="comment_client" rows="2" class="form-control" placeholder="Facultatif"></textarea>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. EXPÉDITION -->
+  <section class="card wiz-pane" data-pane="1" hidden>
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-ship"></i>Expédition</h5>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <label class="form-label">Nature <span class="text-danger">*</span></label>
+          <select class="form-select" name="nature" required><option value="IMPORT" selected>Import</option><option value="EXPORT">Export</option></select>
+        </div>
+        <div class="col-md-8">
+          <label class="form-label">Port ou bureau de douane <span class="text-danger">*</span></label>
+          <select class="form-select" name="port" required>
+            <option value="Port Autonome de Douala (PAD)" selected>Port de Douala (PAD)</option>
+            <option value="Port de Kribi (Seaport)">Port de Kribi</option>
+            <option value="Aéroport International Douala">Aéroport de Douala</option>
+            <option value="Aéroport International Yaoundé-Nsimalen">Aéroport de Nsimalen</option>
+          </select>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">N° du connaissement (BL) <span class="text-danger">*</span></label>
+          <input type="text" name="bl" class="form-control font-monospace" placeholder="ex. 2548956656" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Contenu <span class="text-danger">*</span></label>
+          <input type="text" name="contenu" class="form-control" placeholder="ex. Articles friperie" required>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label">Compagnie maritime / transporteur</label>
+          <input type="text" name="transporteur" class="form-control" placeholder="ex. MSC, Maersk, CMA CGM">
+        </div>
+        <div class="col-md-6"><label class="form-label">Fournisseur</label><input type="text" name="fournisseur_nom" class="form-control"></div>
+        <div class="col-md-6"><label class="form-label">Pays d'origine</label><input type="text" name="fournisseur_pays" class="form-control"></div>
+        <input type="hidden" name="etat" value="OUVERT">
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. CONTENEURS -->
+  <section class="card wiz-pane" data-pane="2" hidden>
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-box-seam"></i>Conteneurs du BL</h5>
+      <p class="text-muted small">Saisissez tous les conteneurs inscrits sur le connaissement. Vous pouvez aussi coller une liste (un numéro par ligne).</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-2" id="ctnTable">
+          <thead><tr><th style="width:2.5rem">#</th><th>N° de conteneur</th><th style="width:9rem">Type</th><th>N° de scellé</th><th style="width:2.5rem"></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="d-flex flex-wrap gap-2 align-items-center">
+        <button type="button" class="btn btn-light btn-sm" id="ctnAdd"><i class="bi bi-plus-lg me-1"></i>Ajouter un conteneur</button>
+        <button type="button" class="btn btn-light btn-sm" data-bs-toggle="collapse" data-bs-target="#ctnPasteBox"><i class="bi bi-clipboard me-1"></i>Coller une liste</button>
+        <span class="ms-auto small fw-semibold" id="ctnCount">0 conteneur</span>
+      </div>
+      <div class="collapse mt-2" id="ctnPasteBox">
+        <textarea class="form-control font-monospace" rows="4" id="ctnPaste" placeholder="MSCU1234567&#10;MSCU7654321 40HC"></textarea>
+        <button type="button" class="btn btn-primary btn-sm mt-2" id="ctnPasteBtn">Ajouter ces conteneurs</button>
+      </div>
+      <div class="form-check mt-3">
+        <input class="form-check-input" type="checkbox" id="noCtn" name="sans_conteneur" value="1">
+        <label class="form-check-label small" for="noCtn">Marchandise hors conteneur (vrac, véhicule, colis aérien)</label>
+      </div>
+      <div class="small text-danger mt-2" id="ctnError" hidden></div>
+    </div>
+  </section>
+
+  <!-- 4. PIÈCES -->
+  <section class="card wiz-pane" data-pane="3" hidden>
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-paperclip"></i>Pièces du dossier</h5>
+      <p class="text-muted small">Le BL et la facture commerciale sont obligatoires pour transmettre le dossier au GUCE. PDF, JPG ou PNG.</p>
+      <div class="doc-rows">
+        <% docs.forEach(d => { %>
+          <div class="doc-row">
+            <div class="dr-l"><i class="bi bi-file-earmark-text"></i><b><%= d.label %></b><% if (d.req) { %> <span class="text-danger">*</span><% } %></div>
+            <% if (d.n !== 'bl') { %><input type="text" name="<%= d.n %>" class="form-control form-control-sm font-monospace" placeholder="<%= d.ph %>"><% } else { %><div class="small text-muted align-self-center">N° saisi à l'étape Expédition</div><% } %>
+            <input type="file" name="<%= d.f %>" class="form-control form-control-sm" accept=".pdf,.jpg,.jpeg,.png" <%= d.req ? 'data-required' : '' %>>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. DOUANE & FISC -->
+  <section class="card wiz-pane" data-pane="4" hidden>
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-shield-check"></i>Douane et fiscalité</h5>
+      <div class="row g-3">
+        <div class="col-md-6"><label class="form-label">Valeur CAF (FCFA) <span class="text-danger">*</span></label><input type="number" name="valeur_douane" class="form-control" min="0" required></div>
+        <div class="col-md-6"><label class="form-label">Droits de douane estimés (FCFA)</label><input type="number" name="droits_douane" class="form-control" min="0"></div>
+        <div class="col-12"><label class="form-label">Observations douane</label><textarea name="comment_douane" rows="2" class="form-control" placeholder="Facultatif"></textarea></div>
+        <div class="col-12"><label class="form-label">Observations fiscales</label><textarea name="comment_fisc" rows="2" class="form-control" placeholder="Régime particulier, exonération…"></textarea></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. RÉCAPITULATIF -->
+  <section class="card wiz-pane" data-pane="5" hidden>
+    <div class="card-body p-4">
+      <h5 class="wiz-title"><i class="bi bi-check2-circle"></i>Vérifiez avant de créer</h5>
+      <dl class="kv" id="recap"></dl>
+    </div>
+  </section>
+
+  <div class="wiz-bar">
+    <button type="button" class="btn btn-light" id="wizPrev" disabled><i class="bi bi-arrow-left me-1"></i>Précédent</button>
+    <span class="small text-muted d-none d-sm-inline" id="wizPos">Étape 1 sur <%= steps.length %></span>
+    <button type="button" class="btn btn-primary" id="wizNext">Suivant<i class="bi bi-arrow-right ms-1"></i></button>
+    <button type="submit" class="btn btn-success" id="wizSubmit" hidden><i class="bi bi-check-lg me-1"></i>Créer le dossier</button>
+  </div>
+</form>
+
+<script>
+(function () {
+  var form = document.getElementById('wizForm');
+  var panes = form.querySelectorAll('.wiz-pane');
+  var stepsEl = document.querySelectorAll('#wizSteps li');
+  var cur = 0, maxReached = 0, total = panes.length;
+  var $ = function (s) { return form.querySelector(s); };
+
+  /* ---------- Conteneurs ---------- */
+  var tbody = document.querySelector('#ctnTable tbody');
+  var TYPES = ['20', '40', '40HC', '45', 'REEFER20', 'REEFER40', 'OPENTOP', 'FLATRACK', 'AUTRE'];
+  var isoOk = function (n) { return /^[A-Z]{4}\d{7}$/.test(n); };
+  function addCtn(numero, type, scelle) {
+    var tr = document.createElement('tr');
+    tr.innerHTML = '<td class="text-muted small" data-n></td>' +
+      '<td><input class="form-control form-control-sm font-monospace text-uppercase" data-num placeholder="ex. MSCU1234567" maxlength="15"></td>' +
+      '<td><select class="form-select form-select-sm" data-type>' + TYPES.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select></td>' +
+      '<td><input class="form-control form-control-sm font-monospace" data-scelle placeholder="Facultatif"></td>' +
+      '<td><button type="button" class="btn btn-sm btn-link text-danger p-0" data-rm aria-label="Retirer"><i class="bi bi-trash"></i></button></td>';
+    tbody.appendChild(tr);
+    tr.querySelector('[data-num]').value = (numero || '').toUpperCase();
+    if (type) tr.querySelector('[data-type]').value = TYPES.indexOf(type.toUpperCase()) >= 0 ? type.toUpperCase() : '40';
+    else tr.querySelector('[data-type]').value = '40';
+    tr.querySelector('[data-scelle]').value = scelle || '';
+    renumber();
+    return tr;
+  }
+  function renumber() {
+    var rows = tbody.querySelectorAll('tr');
+    rows.forEach(function (tr, i) { tr.querySelector('[data-n]').textContent = i + 1; });
+    var n = collectCtn().length;
+    document.getElementById('ctnCount').textContent = n + (n > 1 ? ' conteneurs' : ' conteneur');
+  }
+  function collectCtn() {
+    var out = [];
+    tbody.querySelectorAll('tr').forEach(function (tr) {
+      var n = tr.querySelector('[data-num]').value.replace(/[\s-]/g, '').toUpperCase();
+      if (n) out.push({ numero: n, type: tr.querySelector('[data-type]').value, scelle: tr.querySelector('[data-scelle]').value.trim() });
+    });
+    return out;
+  }
+  document.getElementById('ctnAdd').onclick = function () { addCtn().querySelector('[data-num]').focus(); };
+  tbody.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (b) { b.closest('tr').remove(); if (!tbody.children.length) addCtn(); renumber(); } });
+  tbody.addEventListener('input', function (e) {
+    if (e.target.matches('[data-num]')) {
+      var v = e.target.value.replace(/[\s-]/g, '').toUpperCase();
+      e.target.classList.toggle('is-warn', v.length > 0 && !isoOk(v));
+      renumber();
+    }
+  });
+  tbody.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.matches('[data-num], [data-scelle]')) { e.preventDefault(); addCtn().querySelector('[data-num]').focus(); }
+  });
+  document.getElementById('ctnPasteBtn').onclick = function () {
+    var lines = document.getElementById('ctnPaste').value.split(/\n|;|,/).map(function (l) { return l.trim(); }).filter(Boolean);
+    // retire la ligne vide de départ
+    tbody.querySelectorAll('tr').forEach(function (tr) { if (!tr.querySelector('[data-num]').value) tr.remove(); });
+    lines.forEach(function (l) { var p = l.split(/\s+/); addCtn(p[0], p[1]); });
+    document.getElementById('ctnPaste').value = '';
+    if (!tbody.children.length) addCtn();
+    renumber();
+  };
+  addCtn();
+
+  /* ---------- Navigation ---------- */
+  function err(msg, el) {
+    if (window.showToast) showToast('Il manque une information', msg, null, 'err'); else alert(msg);
+    if (el) { el.classList.add('is-invalid'); el.focus(); setTimeout(function () { el.classList.remove('is-invalid'); }, 2500); }
+    return false;
+  }
+  function validate(i) {
+    if (i === 0) {
+      if (!$('#client_id').value) return err('Choisissez le client.', $('#client_id'));
+    }
+    if (i === 1 && !$('[name="bl"]').value.trim()) return err('Indiquez le numéro du BL.', $('[name="bl"]'));
+    if (i === 1 && !$('[name="contenu"]').value.trim()) return err('Indiquez le contenu (ex. articles friperie).', $('[name="contenu"]'));
+    if (i === 2) {
+      var list = collectCtn(), seen = {}, ce = document.getElementById('ctnError');
+      ce.hidden = true;
+      if (!list.length && !document.getElementById('noCtn').checked) return err('Saisissez les conteneurs du BL, ou cochez « Marchandise hors conteneur ».');
+      for (var k = 0; k < list.length; k++) { if (seen[list[k].numero]) return err('Le conteneur ' + list[k].numero + ' est saisi deux fois.'); seen[list[k].numero] = 1; }
+      var bad = list.filter(function (c) { return !isoOk(c.numero); }).map(function (c) { return c.numero; });
+      if (bad.length && !confirm('Ces numéros ne suivent pas le format habituel (4 lettres + 7 chiffres) : ' + bad.join(', ') + '. Continuer quand même ?')) return false;
+    }
+    if (i === 4 && !(parseFloat($('[name="valeur_douane"]').value) > 0)) return err('Indiquez la valeur CAF (coût, assurance, fret) en FCFA.', $('[name="valeur_douane"]'));
+    if (i === 3) {
+      var miss = [];
+      form.querySelectorAll('[data-required]').forEach(function (inp) { if (!inp.files.length) miss.push(inp.closest('.doc-row').querySelector('b').textContent); });
+      if (miss.length && !confirm('Pièces manquantes : ' + miss.join(', ') + '.\nLe dossier sera créé, mais ne pourra pas aller au GUCE tant qu\'elles manquent. Continuer ?')) return false;
+    }
+    return true;
+  }
+  function recap() {
+    var sel = $('#client_id'), ctn = collectCtn();
+    var files = []; form.querySelectorAll('input[type=file]').forEach(function (f) { if (f.files.length) files.push(f.closest('.doc-row').querySelector('b').textContent); });
+    var rows = [
+      ['Nom du dossier', sel.options[sel.selectedIndex] && sel.value ? sel.options[sel.selectedIndex].text.toUpperCase() : '—'],
+      ['En dessous', 'BL ' + $('[name="bl"]').value + ' · ' + $('[name="contenu"]').value],
+      ['Expédition', $('[name="nature"]').value + ' · ' + $('[name="port"]').value],
+      ['Transporteur', $('[name="transporteur"]').value || '—'],
+      ['Conteneurs', ctn.length ? ctn.length + ' : ' + ctn.map(function (c) { return c.numero + ' (' + c.type + ')'; }).join(', ') : 'Hors conteneur'],
+      ['Pièces jointes', files.length ? files.join(', ') : 'Aucune'],
+    ];
+    var esc = function (s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; };
+    document.getElementById('recap').innerHTML = rows.map(function (r) { return '<div><dt>' + r[0] + '</dt><dd>' + esc(r[1]) + '</dd></div>'; }).join('');
+  }
+  function show(i) {
+    cur = i; maxReached = Math.max(maxReached, i);
+    panes.forEach(function (p, k) { p.hidden = k !== i; });
+    stepsEl.forEach(function (li, k) { li.className = k < i ? 'done' : k === i ? 'now' : (k <= maxReached ? 'seen' : ''); });
+    document.getElementById('wizPrev').disabled = i === 0;
+    document.getElementById('wizNext').hidden = i === total - 1;
+    document.getElementById('wizSubmit').hidden = i !== total - 1;
+    document.getElementById('wizPos').textContent = 'Étape ' + (i + 1) + ' sur ' + total;
+    if (i === total - 1) recap();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+  document.getElementById('wizNext').onclick = function () { if (validate(cur)) show(cur + 1); };
+  document.getElementById('wizPrev').onclick = function () { if (cur > 0) show(cur - 1); };
+  document.getElementById('wizSteps').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-goto]'); if (!b) return;
+    var to = parseInt(b.getAttribute('data-goto'), 10);
+    if (to <= cur) return show(to);
+    for (var k = cur; k < to; k++) if (!validate(k)) return show(k);
+    show(to);
+  });
+  form.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && e.target.tagName === 'INPUT' && cur < total - 1) { e.preventDefault(); document.getElementById('wizNext').click(); }
+  });
+  form.addEventListener('submit', function (e) {
+    for (var k = 0; k < total - 1; k++) if (!validate(k)) { e.preventDefault(); return show(k); }
+    document.getElementById('conteneurs_json').value = JSON.stringify(collectCtn());
+    document.getElementById('wizSubmit').disabled = true;
+  });
+
+  /* ---------- Client : informations et représentants ---------- */
+  var repSelect = $('#representant_id'), reps = [];
+  function fillReps(clientReps, allReps) {
+    repSelect.innerHTML = '<option value="">Aucun</option>';
+    var add = function (label, list) {
+      if (!list.length) return;
+      var g = document.createElement('optgroup'); g.label = label;
+      list.forEach(function (r) { var o = document.createElement('option'); o.value = r.id; o.textContent = (r.nom + ' ' + (r.prenom || '')).trim() + (r.fonction ? ' (' + r.fonction + ')' : ''); g.appendChild(o); });
+      repSelect.appendChild(g);
+    };
+    var mine = clientReps.filter(function (r) { return r.actif; });
+    add('Représentants de ce client', mine);
+    add('Autres représentants', allReps.filter(function (r) { return r.actif && !mine.some(function (m) { return m.id === r.id; }); }));
+  }
+  $('#client_id').addEventListener('change', function () {
+    var id = this.value;
+    ['niu', 'acf'].forEach(function (k) { document.getElementById('display-' + k).textContent = '—'; });
+    document.getElementById('client-docs').innerHTML = '';
+    document.getElementById('add-rep-link-container').style.display = id ? '' : 'none';
+    if (!id) return;
+    document.getElementById('add-rep-link').href = '/clients/' + id + '/representants/create';
+    fetch('/api/clients/' + id).then(function (r) { return r.json(); }).then(function (c) {
+      document.getElementById('display-niu').textContent = c.niu || 'Non renseigné';
+      document.getElementById('display-acf').textContent = c.acf || 'Non renseigné';
+      document.getElementById('client-docs').innerHTML =
+        '<span class="badge ' + (c.has_cni ? 'text-bg-success' : 'text-bg-warning') + ' me-1">' + (c.has_cni ? 'CNI fournie' : 'CNI manquante') + '</span>' +
+        '<span class="badge ' + (c.has_procu ? 'text-bg-success' : 'text-bg-light border') + '">' + (c.has_procu ? 'Procuration fournie' : 'Pas de procuration') + '</span>';
+      if (c.representant && !$('[name="representant"]').value) $('[name="representant"]').value = c.representant;
+    }).catch(function () {});
+    Promise.all([fetch('/api/clients/' + id + '/representants').then(function (r) { return r.json(); }), fetch('/api/representants').then(function (r) { return r.json(); })])
+      .then(function (res) { reps = res[1]; fillReps(res[0], res[1]); }).catch(function () {});
+  });
+  repSelect.addEventListener('change', function () {
+    var r = reps.find(function (x) { return x.id === parseInt(repSelect.value, 10); });
+    if (r) $('[name="representant"]').value = (r.nom + ' ' + (r.prenom || '')).trim();
+  });
+
+  // Aperçu du nom : le client en titre, le BL et le contenu en dessous
+  function namePreview() {
+    var sel = $('#client_id'), el = document.getElementById('dossierNamePreview');
+    if (!el) return;
+    var nom = sel.value && sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text.toUpperCase() : '';
+    var sub = [$('[name="bl"]').value.trim() ? 'BL ' + $('[name="bl"]').value.trim() : '', $('[name="contenu"]').value.trim()].filter(Boolean).join(' · ');
+    el.innerHTML = nom ? '' : 'Choisissez un client';
+    if (nom) { var b = document.createElement('div'); b.textContent = nom; el.appendChild(b); if (sub) { var s2 = document.createElement('div'); s2.className = 'small text-muted fw-normal'; s2.textContent = sub; el.appendChild(s2); } }
+  }
+  ['#client_id', '[name="bl"]', '[name="contenu"]'].forEach(function (q) { var e = $(q); if (e) { e.addEventListener('input', namePreview); e.addEventListener('change', namePreview); } });
+  namePreview();
+  var q = new URLSearchParams(location.search).get('client_id');
+  if (q) { $('#client_id').value = q; $('#client_id').dispatchEvent(new Event('change')); }
+})();
+</script>
+
+<%- include('../partials/footer') %>

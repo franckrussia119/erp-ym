@@ -1,0 +1,665 @@
+<%- include('../partials/header') %>
+
+<%
+  const firstName = (user && (user.prenom && !/^(PDG|DG|DGA|DAF|Super Admin)$/i.test(user.prenom) ? user.prenom : user.nom)) || '';
+  const hour = new Date().getHours();
+  const greet = hour < 12 ? 'Bonjour' : hour < 18 ? 'Bon après-midi' : 'Bonsoir';
+  const stageMeta = Object.fromEntries(STEPS.map(st => [st.key, st]));
+%>
+<div class="text-start">
+
+  <!-- En-tête de bienvenue -->
+  <div class="dash-hero mb-4">
+    <%- include('../partials/_hero_fx', { icons: ['bi-graph-up-arrow', 'bi-receipt', 'bi-box-seam', 'bi-cash-coin'] }) %>
+    <div class="dh-text">
+      <div class="dh-date"><i class="bi bi-calendar3 me-1"></i><%= new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) %></div>
+      <h1><%= greet %>, <%= firstName %> 👋</h1>
+      <p>Voici ce qui se passe aujourd'hui chez <strong><%= user && user.societe ? user.societe : 'YM-TRANSIT' %></strong>.</p>
+    </div>
+    <div class="dh-actions">
+      <% if (['super_admin', 'secretariat', 'secretaire'].includes(role)) { %>
+        <a href="/dossiers/create" class="btn btn-light"><i class="bi bi-folder-plus me-1"></i> Nouveau dossier</a>
+      <% } %>
+      <% if (['super_admin', 'comptable', 'finances', 'facturation'].includes(role)) { %>
+        <a href="/facturation" class="btn btn-light"><i class="bi bi-receipt me-1"></i> Factures</a>
+      <% } %>
+      <a href="/taches" class="btn btn-light"><i class="bi bi-kanban me-1"></i> Tâches</a>
+    </div>
+  </div>
+
+  <!-- ==================================================== -->
+  <!-- SECTION A : Mon Espace de Travail (Urgent Action Cards) -->
+  <!-- ==================================================== -->
+  <div class="mb-5">
+    <div class="section-title">
+      <h2><i class="bi bi-lightning-charge-fill"></i>À traiter maintenant</h2>
+      <span>Vos dossiers et actions en attente</span>
+      <% if (Array.isArray(pendingWork) && pendingWork.length > 6) { %><a class="ms-auto section-more" href="<%= ['pdg', 'dg', 'dga', 'daf', 'caisse', 'agent_payeur'].includes(role) ? '/bons/visas' : '/dossiers' %>">Voir les <%= pendingWork.length %> <i class="bi bi-arrow-right"></i></a><% } %>
+    </div>
+
+    <% 
+      let hasActions = false; 
+    %>
+
+    <!-- Secretariat actions -->
+    <% if ((role === "secretariat" || role === "secretaire") && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <div class="col-12 col-md-4">
+            <div class="card bg-info-subtle border-start border-4 border-info shadow-sm py-2 mb-3">
+              <div class="card-body">
+                <h6 class="text-info-emphasis fw-bold text-uppercase text-xs tracking-wider mb-1">Dossiers créés ce mois</h6>
+                <p class="h3 fw-bold text-slate-800 mb-0"><%= extraData.createdThisMonthCount || 0 %></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(d => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 border-start border-4 border-warning shadow-sm h-100">
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                      <span class="badge bg-warning text-dark text-xs"><%= d.numero %></span>
+                      <small class="text-xs text-muted"><%= new Date(d.created_at).toLocaleDateString('fr-FR') %></small>
+                    </div>
+                    <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : 'Client inconnu' %></h6>
+                    <p class="text-muted text-xs mb-3">
+                      <strong>Port :</strong> <%= d.port %> | <strong>Nature :</strong> <%= d.nature %>
+                    </p>
+                  </div>
+                  <div>
+                    <a href="/dossiers/<%= d.id %>" class="btn btn-outline-warning btn-sm w-full fw-semibold rounded-pill">
+                      <i class="bi bi-box-arrow-in-right me-1"></i> Soumettre au GUCE
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- GUCE actions -->
+    <% } else if (role === "guce" && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(d => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 border-start border-4 border-primary shadow-sm h-100 animate-pulse">
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                      <span class="badge bg-primary text-white text-xs"><%= d.numero %></span>
+                      <small class="text-xs text-muted"><%= new Date(d.created_at).toLocaleDateString('fr-FR') %></small>
+                    </div>
+                    <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : 'Client inconnu' %></h6>
+                    <p class="text-muted text-xs mb-3">
+                      <strong>Port :</strong> <%= d.port %> | <strong>Nature :</strong> <%= d.nature %>
+                    </p>
+                  </div>
+                  <div>
+                    <a href="/dossiers/<%= d.id %>" class="btn btn-primary btn-sm w-full fw-semibold rounded-pill">
+                      <i class="bi bi-shield-check me-1"></i> Traiter ce dossier
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Validation actions -->
+    <% } else if ((role === "validation" || role === "validation_role") && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(d => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 border-start border-4 border-danger shadow-sm h-100">
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                      <span class="badge bg-danger text-white text-xs"><%= d.numero %></span>
+                      <small class="text-xs text-muted"><%= new Date(d.created_at).toLocaleDateString('fr-FR') %></small>
+                    </div>
+                    <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : 'Client inconnu' %></h6>
+                    <p class="text-muted text-xs mb-3">
+                      <strong>Port :</strong> <%= d.port %> | <strong>Nature :</strong> <%= d.nature %>
+                    </p>
+                  </div>
+                  <div>
+                    <a href="/dossiers/<%= d.id %>" class="btn btn-danger btn-sm w-full fw-semibold rounded-pill">
+                      <i class="bi bi-check2-all me-1"></i> Valider ce dossier
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Acconage / Enlevement actions -->
+    <% } else if ((role === "acconage" || role === "enlevement") && pendingWork) { %>
+      <% 
+        const { dossiersEnTraitement, myPendingBons, dossiersBonReel } = pendingWork;
+        if (dossiersEnTraitement.length > 0 || myPendingBons.length > 0 || dossiersBonReel.length > 0) {
+          hasActions = true;
+      %>
+        <!-- Sub-section 1: dossiersEnTraitement -->
+        <% if (dossiersEnTraitement.length > 0) { %>
+          <div class="mb-4">
+            <h6 class="fw-bold text-primary mb-2"><i class="bi bi-truck me-1"></i> Dossiers en cours de livraison / transit (<%= dossiersEnTraitement.length %>)</h6>
+            <div class="row g-3">
+              <% dossiersEnTraitement.forEach(d => { %>
+                <div class="col-md-6 col-lg-4">
+                  <div class="card border-0 border-start border-4 border-primary shadow-sm h-100">
+                    <div class="card-body d-flex flex-column justify-content-between">
+                      <div>
+                        <span class="badge bg-primary text-white text-xs mb-2"><%= d.numero %></span>
+                        <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : '' %></h6>
+                        <small class="text-muted d-block mb-3">Nature: <%= d.nature %> | Port: <%= d.port %></small>
+                      </div>
+                      <a href="/dossiers/<%= d.id %>" class="btn btn-outline-primary btn-sm rounded-pill fw-bold">Faire un bon / Traiter</a>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <!-- Sub-section 2: myPendingBons -->
+        <% if (myPendingBons.length > 0) { %>
+          <div class="mb-4">
+            <h6 class="fw-bold text-warning mb-2"><i class="bi bi-clock-history me-1"></i> Vos Demandes de Bons en signature (<%= myPendingBons.length %>)</h6>
+            <div class="row g-3">
+              <% myPendingBons.forEach(b => { %>
+                <div class="col-md-6 col-lg-4">
+                  <div class="card border-0 border-start border-4 border-warning shadow-sm h-100">
+                    <div class="card-body">
+                      <div class="d-flex justify-content-between align-items-start mb-2">
+                        <span class="badge bg-warning text-dark text-xs"><%= b.numero %></span>
+                        <small class="text-xs text-muted"><%= b.montant_demande.toLocaleString('fr-Fr') %> FCFA</small>
+                      </div>
+                      <h6 class="fw-bold text-slate-800 mb-1">Dossier: <%= b.dossier ? b.dossier.numero : 'N/A' %></h6>
+                      <p class="text-xs text-muted mb-0">Objet: <%= b.objet %></p>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+
+        <!-- Sub-section 3: dossiersBonReel -->
+        <% if (dossiersBonReel.length > 0) { %>
+          <div class="mb-4">
+            <h6 class="fw-bold text-danger mb-2"><i class="bi bi-check-circle me-1"></i> Régularisations Bons Réels en attente (<%= dossiersBonReel.length %>)</h6>
+            <div class="row g-3">
+              <% dossiersBonReel.forEach(d => { %>
+                <div class="col-md-6 col-lg-4">
+                  <div class="card border-0 border-start border-4 border-danger shadow-sm h-100">
+                    <div class="card-body d-flex flex-column justify-content-between">
+                      <div>
+                        <span class="badge bg-danger text-white text-xs mb-2"><%= d.numero %></span>
+                        <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : '' %></h6>
+                        <small class="text-xs text-muted d-block mb-3">Pièces jointes requises pour le terrain</small>
+                      </div>
+                      <a href="/dossiers/<%= d.id %>" class="btn btn-danger btn-sm rounded-pill fw-bold">Saisir le Bon Réel</a>
+                    </div>
+                  </div>
+                </div>
+              <% }) %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+
+    <!-- PDG / DG / DGA / DAF actions -->
+    <% } else if (['pdg', 'dg', 'dga', 'daf'].includes(role) && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(b => { const emetteur = b.demandeur ? [b.demandeur.prenom, b.demandeur.nom].filter(Boolean).join(' ') : '—'; %>
+            <div class="col-md-6 col-lg-4">
+              <a href="/bons/visas#bon-<%= b.id %>" class="dash-bon <%= b.urgent ? 'urgent' : '' %>">
+                <div class="db-top"><span class="db-who"><% if (b.urgent) { %><span class="badge-urgent me-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %><%= emetteur %></span><b class="db-amt"><%= Math.round(b.montant_demande).toLocaleString('fr-FR') %> F</b></div>
+                <div class="db-what"><%= b.dossier ? (b.dossier.client ? b.dossier.client.nom : b.dossier.numero) + ' · BL ' + (b.dossier.bl || '—') : 'Dépense interne' %></div>
+                <div class="db-obj"><%= b.objet %></div>
+                <div class="db-foot"><span><%= b.numero %> · <%= new Date(b.created_at).toLocaleDateString('fr-FR') %></span><span class="db-go"><i class="bi bi-pen"></i>Viser</span></div>
+              </a>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Caisse / Agent payeur actions -->
+    <% } else if (['caisse', 'agent_payeur'].includes(role) && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(b => {
+               const VK = ['pdg','dg','dga','daf','audit'].filter(k => b['tick_' + k + '_by'] !== 'Non requis');
+               const done = VK.filter(k => b['tick_' + k]).length;
+               const ready = b.etat === 'EN_ATTENTE' && (done === VK.length || b.ordre_paiement_by);
+               const label = b.etat !== 'EN_ATTENTE' ? 'Régularisation à confirmer' : ready ? (b.ordre_paiement_by && done < VK.length ? 'Payer sur ordre' : 'Prêt à payer') : `Visas ${done}/${VK.length}`; %>
+            <div class="col-md-6 col-lg-4">
+              <a href="/bons/<%= b.id %>" class="card h-100 text-decoration-none border-start border-4 <%= ready ? 'border-success' : b.etat !== 'EN_ATTENTE' ? 'border-primary' : 'border-warning' %>">
+                <div class="card-body">
+                  <div class="d-flex justify-content-between align-items-start mb-1">
+                    <span class="fw-bold small text-dark"><%= b.numero %></span>
+                    <span class="badge <%= ready ? 'text-bg-success' : b.etat !== 'EN_ATTENTE' ? 'text-bg-primary' : 'text-bg-warning' %>"><%= label %></span>
+                  </div>
+                  <div class="fs-5 fw-bold text-dark"><%= Math.round(b.montant_demande).toLocaleString('fr-FR') %> F</div>
+                  <div class="small text-muted text-truncate"><%= b.dossier ? 'Dossier ' + b.dossier.numero : 'Dépense interne' %> · <%= b.objet %></div>
+                  <div class="small text-muted">Demandeur : <%= b.demandeur ? [b.demandeur.prenom, b.demandeur.nom].filter(Boolean).join(' ') : '—' %></div>
+                </div>
+              </a>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Finance / Facturation actions -->
+    <% } else if (['finances', 'facturation'].includes(role) && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(d => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 border-start border-4 border-primary shadow-sm h-100">
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <div>
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                      <span class="badge bg-primary text-white text-xs"><%= d.numero %></span>
+                      <small class="text-xs text-muted"><%= new Date(d.created_at).toLocaleDateString('fr-FR') %></small>
+                    </div>
+                    <h6 class="fw-bold text-slate-800 mb-1">Importateur : <%= d.client ? d.client.nom : 'Inconnu' %></h6>
+                    <p class="text-xs text-muted mb-3"><%= d.pipeline_status === 'PAIEMENT_DROITS' ? 'Facture 1 des droits puis paiement à la banque.' : 'Facture finale (débours et honoraires) à émettre.' %></p>
+                  </div>
+                  <a href="/dossiers/<%= d.id %><%= d.pipeline_status === 'PAIEMENT_DROITS' ? '#droits' : '#finance' %>" class="btn btn-outline-primary btn-sm w-full fw-bold rounded-pill">
+                    <i class="bi bi-arrow-right-circle me-1"></i> <%= d.pipeline_status === 'PAIEMENT_DROITS' ? 'Facture 1 et banque' : 'Facturer le dossier' %>
+                  </a>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Cloture actions -->
+    <% } else if (role === "cloture" && pendingWork) { %>
+      <% if (pendingWork.length > 0) { hasActions = true; %>
+        <div class="row g-3">
+          <% pendingWork.slice(0, 6).forEach(d => { %>
+            <div class="col-md-6 col-lg-4">
+              <div class="card border-0 border-start border-4 border-dark shadow-sm h-100">
+                <div class="card-body d-flex flex-column justify-content-between">
+                  <div>
+                    <span class="badge bg-dark text-white text-xs mb-2"><%= d.numero %></span>
+                    <h6 class="fw-bold text-slate-800 mb-1"><%= d.client ? d.client.nom : 'Client inconnu' %></h6>
+                    <p class="text-xs text-muted mb-3">Frais acquittés et livraison bouclée. Prêt pour clôture définitive.</p>
+                  </div>
+                  <a href="/dossiers/<%= d.id %>" class="btn btn-dark btn-sm w-full fw-bold rounded-pill">
+                    <i class="bi bi-archive-fill me-1"></i> Clôturer ce dossier
+                  </a>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      <% } %>
+
+    <!-- Archiviste actions -->
+    <% } else if (role === "archiviste" && pendingWork) { %>
+      <% hasActions = true; %>
+      <div class="mb-3">
+        <div class="card bg-slate-900 text-white p-3 mb-4 rounded border-0">
+          <div class="d-flex align-items-center justify-content-between">
+            <div>
+              <span class="text-slate-400 text-xs text-uppercase fw-bold">Archives de transit</span>
+              <h4 class="fw-bold text-white mb-0 mt-1"><%= extraData.archiveCount || 0 %> dossiers archivés au total</h4>
+            </div>
+            <i class="bi bi-archive-fill text-primary" style="font-size: 2.2rem;"></i>
+          </div>
+        </div>
+        <h6 class="fw-bold mb-2 text-dark"><i class="bi bi-clock-history"></i> Derniers dossiers archivés (Lecture Seule)</h6>
+        <div class="table-responsive bg-white rounded shadow-sm border">
+          <table class="table align-middle mb-0" style="font-size: 0.85rem;">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-3">Numéro</th>
+                <th>Client</th>
+                <th>Port</th>
+                <th>Nature</th>
+                <th class="text-end pe-3">Lier</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% pendingWork.slice(0, 6).forEach(d => { %>
+                <tr>
+                  <td class="ps-3 fw-bold"><%= d.numero %></td>
+                  <td><%= d.client ? d.client.nom : '' %></td>
+                  <td><%= d.port %></td>
+                  <td><%= d.nature %></td>
+                  <td class="text-end pe-3">
+                    <a href="/dossiers/<%= d.id %>" class="btn btn-outline-dark btn-xs px-2.5 py-0.5 rounded-pill" style="font-size: 0.72rem;">Consulter</a>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    <!-- Analyste / Auditeur actions -->
+    <% } else if (['analyste', 'auditeur1', 'auditeur2'].includes(role) && pendingWork) { %>
+      <% hasActions = true; %>
+      <div class="row g-3">
+        <div class="col-md-4">
+          <div class="card border-0 border-start border-4 border-primary bg-light shadow-sm h-100">
+            <div class="card-body">
+              <div class="text-xs text-muted text-uppercase font-bold mb-1">Dossiers créés ce mois</div>
+              <h3 class="fw-bold text-slate-800 mb-1"><%= pendingWork.dossiersThisMonth %></h3>
+              <p class="text-muted text-xs mb-0">Cumul mensuel des importations</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card border-0 border-start border-4 border-success bg-light shadow-sm h-100">
+            <div class="card-body">
+              <div class="text-xs text-muted text-uppercase font-bold mb-1">Facturé ce mois</div>
+              <h3 class="fw-bold text-success mb-1"><%= pendingWork.totalInvoicedThisMonth.toLocaleString('fr-FR') %> <small class="fs-6 fw-normal text-muted">FCFA</small></h3>
+              <p class="text-muted text-xs mb-0">Total des factures émises TTC</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-4">
+          <div class="card border-0 border-start border-4 border-warning bg-light shadow-sm h-100">
+            <div class="card-body">
+              <div class="text-xs text-muted text-uppercase font-bold mb-1">Bons en attente de visa</div>
+              <h3 class="fw-bold text-warning-emphasis mb-1"><%= pendingWork.pendingBonsCount %></h3>
+              <p class="text-muted text-xs mb-0">En attente de revue par direction</p>
+            </div>
+          </div>
+        </div>
+        <div class="col-12 mt-3">
+          <a href="/analytics" class="btn btn-outline-primary d-inline-flex align-items-center rounded-pill">
+            <i class="bi bi-graph-up-arrow me-2"></i> Consulter l'Analyse complete
+          </a>
+        </div>
+      </div>
+
+    <!-- Comptable actions -->
+    <% } else if (['comptable', 'comptable_ops'].includes(role) && pendingWork) { %>
+      <% hasActions = true; %>
+      <div class="row g-3 mb-4">
+        <div class="col-md-6">
+          <div class="card border-0 border-start border-4 border-danger shadow-sm">
+            <div class="card-body">
+              <div class="text-xs text-muted text-uppercase font-bold mb-1">Crances Clients en Attente</div>
+              <h3 class="fw-bold text-dark mb-1"><%= pendingWork.unpaidCount %> factures</h3>
+              <p class="text-xs mb-0 text-muted">Montant restant : <strong class="text-danger"><%= pendingWork.unpaidTotal.toLocaleString('fr-Fr') %> FCFA</strong></p>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6 d-flex align-items-end">
+          <a href="/accounting/journal" class="btn btn-primary rounded-pill px-4 me-2">
+            <i class="bi bi-journal-text me-1"></i> Ouvrir le Livre Journal
+          </a>
+          <a href="/facturation" class="btn btn-outline-secondary rounded-pill px-4">
+             Enregistrer un versement
+          </a>
+        </div>
+      </div>
+      <div class="card border-0 shadow-sm">
+        <div class="card-header bg-light py-2.5 border-0">
+          <span class="fw-bold text-dark small"><i class="bi bi-journal-text me-2"></i> Dernières écritures comptables imputées</span>
+        </div>
+        <div class="card-body p-0">
+          <div class="table-responsive">
+            <table class="table align-middle mb-0 text-start" style="font-size: 0.85rem;">
+              <thead class="table-light">
+                <tr>
+                  <th class="ps-3">Date</th>
+                  <th>Journal</th>
+                  <th>Réf Pièce</th>
+                  <th>N° Compte</th>
+                  <th>Libellé écriture</th>
+                  <th class="text-end">Débit</th>
+                  <th class="text-end pe-3">Crédit</th>
+                </tr>
+              </thead>
+              <tbody>
+                <% if (pendingWork.recentEntries && pendingWork.recentEntries.length > 0) { %>
+                  <% pendingWork.recentEntries.forEach(e => { %>
+                    <tr>
+                      <td class="ps-3"><%= new Date(e.date).toLocaleDateString('fr-FR') %></td>
+                      <td><span class="badge bg-secondary"><%= e.journal %></span></td>
+                      <td><strong class="font-monospace"><%= e.piece_ref %></strong></td>
+                      <td><%= e.compte ? e.compte.code : '' %></td>
+                      <td><%= e.libelle %></td>
+                      <td class="text-end font-monospace text-emerald-700"><%= e.debit > 0 ? e.debit.toLocaleString('fr-FR') : '-' %></td>
+                      <td class="text-end font-monospace text-rose-700 pe-3"><%= e.credit > 0 ? e.credit.toLocaleString('fr-FR') : '-' %></td>
+                    </tr>
+                  <% }) %>
+                <% } else { %>
+                  <tr>
+                    <td colspan="7" class="text-center text-muted py-4">Aucune imputation comptable récente.</td>
+                  </tr>
+                <% } %>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    <!-- Super Admin general default panel -->
+    <% } else if (role === "super_admin") { %>
+      <% hasActions = true; %>
+      <div class="admin-banner">
+        <%- include('../partials/_hero_fx', { icons: ['bi-shield-check', 'bi-people', 'bi-activity'] }) %>
+        <div class="ab-ico"><i class="bi bi-shield-fill-check"></i></div>
+        <div class="flex-grow-1">
+          <h4>Espace de contrôle administrateur</h4>
+          <p>Tous les modules opérationnels et administratifs de l'agence sont sous votre supervision.</p>
+        </div>
+        <div class="d-flex gap-2 flex-wrap">
+          <a href="/admin/users" class="btn btn-light"><i class="bi bi-people me-1"></i> Utilisateurs</a>
+          <a href="/logs" class="btn btn-outline-light"><i class="bi bi-activity me-1"></i> Journal d'activité</a>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- If there is absolutely nothing pending for the user's role -->
+    <% if (!hasActions) { %>
+      <div class="card">
+        <div class="empty-state">
+          <div class="es-ico" style="color:#059669;background:#dcfce7"><i class="bi bi-check2-all"></i></div>
+          <h5 class="mb-1">Tout est à jour</h5>
+          <p class="mb-0 small">Aucune action ni validation n'attend votre rôle pour le moment.</p>
+        </div>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- Vue d'ensemble -->
+  <div class="section-title">
+    <h2><i class="bi bi-globe2"></i>Vue d'ensemble</h2>
+    <span>Activité de l'agence</span>
+  </div>
+
+  <% if (isAdminRole && adminMetrics) { %>
+    <div class="row g-3 mb-4">
+      <div class="col-sm-6 col-xl-4">
+        <div class="kpi" style="--k:#059669">
+          <div class="d-flex justify-content-between align-items-start">
+            <span class="k-ico"><i class="bi bi-graph-up-arrow"></i></span>
+            <span class="badge" style="background:#dcfce7;color:#047857">Ce mois-ci</span>
+          </div>
+          <div class="k-label">Chiffre d'affaires facturé (TTC)</div>
+          <div class="k-value"><%= adminMetrics.monthlyRevenue.toLocaleString('fr-FR') %> <small>FCFA</small></div>
+          <div class="k-foot">Hors factures annulées · <%= new Date().toLocaleDateString('fr-FR', { month: 'long' }) %></div>
+        </div>
+      </div>
+      <div class="col-sm-6 col-xl-4">
+        <div class="kpi" style="--k:#0d9488">
+          <div class="d-flex justify-content-between align-items-start">
+            <span class="k-ico"><i class="bi bi-hourglass-split"></i></span>
+            <a href="/bons/provisoir/pending" class="small fw-semibold text-decoration-none" style="color:#047857">Voir <i class="bi bi-arrow-right"></i></a>
+          </div>
+          <div class="k-label">Bons provisoires en attente</div>
+          <div class="k-value"><%= adminMetrics.totalPendingBonsAmount.toLocaleString('fr-FR') %> <small>FCFA</small></div>
+          <div class="k-foot">Montant en cours d'approbation</div>
+        </div>
+      </div>
+      <div class="col-sm-12 col-xl-4">
+        <div class="kpi" style="--k:#dc2626">
+          <div class="d-flex justify-content-between align-items-start">
+            <span class="k-ico"><i class="bi bi-alarm"></i></span>
+            <a href="/facturation" class="small fw-semibold text-decoration-none" style="color:#b91c1c">Relancer <i class="bi bi-arrow-right"></i></a>
+          </div>
+          <div class="k-label">Factures clients en retard</div>
+          <div class="k-value"><%= adminMetrics.overdueCount %> <small><%= adminMetrics.overdueCount > 1 ? 'factures' : 'facture' %></small></div>
+          <div class="k-foot">Impayées depuis plus de 30 jours</div>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <!-- Pipeline : une couleur par étape -->
+  <div class="card mb-4">
+    <div class="card-header d-flex align-items-center justify-content-between">
+      <span><i class="bi bi-diagram-3 me-2" style="color:var(--accent)"></i>Pipeline des dossiers</span>
+      <a href="/dossiers" class="small fw-semibold text-decoration-none">Tous les dossiers <i class="bi bi-arrow-right"></i></a>
+    </div>
+    <div class="card-body">
+      <div class="pipeline-tiles">
+        <% STEPS.filter(st => st.key !== 'ARCHIVE').forEach(st => { const key = st.key; %>
+          <a href="/dossiers?pipeline_status=<%= key %>" class="pipe-tile step-c-<%= st.n %>">
+            <div class="d-flex justify-content-between align-items-start">
+              <div class="pt-n"><%= pipelineSummary[key] || 0 %></div>
+              <i class="bi <%= st.icon %>" style="color:var(--step);opacity:.8"></i>
+            </div>
+            <div class="pt-l"><%= st.label %></div>
+            <span class="pt-bar"></span>
+          </a>
+        <% }) %>
+      </div>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Derniers dossiers -->
+    <div class="col-xl-8">
+      <div class="card h-100">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-clock-history me-2" style="color:var(--accent)"></i>Derniers dossiers</span>
+          <a href="/dossiers" class="small fw-semibold text-decoration-none">Registre complet <i class="bi bi-arrow-right"></i></a>
+        </div>
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Dossier</th>
+                <th>Client</th>
+                <th class="d-none d-xxl-table-cell">Port</th>
+                <th class="d-none d-md-table-cell">Ouvert le</th>
+                <th class="text-end">Étape</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (last5Dossiers && last5Dossiers.length > 0) { %>
+                <% last5Dossiers.forEach(ds => { const st = stageMeta[ds.pipeline_status] || { n: 1, label: ds.pipeline_status }; %>
+                  <tr style="cursor:pointer" onclick="location.href='/dossiers/<%= ds.id %>'">
+                    <td><a href="/dossiers/<%= ds.id %>" class="fw-semibold text-decoration-none"><%= ds.numero %></a></td>
+                    <td>
+                      <div class="fw-semibold text-dark text-truncate" style="max-width:240px"><%= ds.client ? ds.client.nom : 'Inconnu' %></div>
+                      <div class="small text-muted text-truncate" style="max-width:240px"><%= [ds.nature, ds.port].filter(Boolean).join(' · ') %></div>
+                    </td>
+                    <td class="d-none d-xxl-table-cell small"><%= ds.port %></td>
+                    <td class="d-none d-md-table-cell small text-muted text-nowrap"><%= new Date(ds.created_at).toLocaleDateString('fr-FR') %></td>
+                    <td class="text-end"><span class="stage-pill step-c-<%= st.n %>"><%= st.label %></span></td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr><td colspan="5"><div class="empty-state"><div class="es-ico"><i class="bi bi-folder2-open"></i></div>Aucun dossier pour le moment.</div></td></tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Colonne droite : mes tâches + activité -->
+    <div class="col-xl-4 d-flex flex-column gap-4">
+      <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+          <span><i class="bi bi-check2-square me-2" style="color:var(--c-taches)"></i>Mes tâches</span>
+          <a href="/taches/mine" class="small fw-semibold text-decoration-none" style="color:var(--c-taches)">Tout voir</a>
+        </div>
+        <div class="list-group list-group-flush">
+          <% if (myTasks && myTasks.length) { %>
+            <% myTasks.forEach(t => { const late = t.deadline && new Date(t.deadline) < new Date(); %>
+              <a href="/taches/<%= t.id %>" class="list-group-item list-group-item-action d-flex gap-3 align-items-start py-3">
+                <span class="task-dot <%= late ? 'late' : '' %>"></span>
+                <span class="min-w-0 flex-grow-1">
+                  <span class="d-block fw-semibold text-dark small text-truncate"><%= t.titre %></span>
+                  <span class="d-block small text-muted"><%= t.dossier ? t.dossier.numero : '' %><% if (t.deadline) { %> · <span class="<%= late ? 'text-danger fw-semibold' : '' %>"><%= late ? 'En retard' : 'Échéance' %> <%= new Date(t.deadline).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) %></span><% } %></span>
+                </span>
+              </a>
+            <% }) %>
+          <% } else { %>
+            <div class="empty-state py-4"><div class="es-ico" style="color:var(--c-taches);background:color-mix(in srgb,var(--c-taches) 10%,white)"><i class="bi bi-cup-hot"></i></div><span class="small">Aucune tâche ouverte à votre nom.</span></div>
+          <% } %>
+        </div>
+      </div>
+
+      <div class="card flex-grow-1">
+        <div class="card-header"><i class="bi bi-activity me-2" style="color:var(--accent)"></i>Activité récente</div>
+        <div class="card-body pt-3">
+          <% if (recentActivity && recentActivity.length) { %>
+            <ul class="feed">
+              <% recentActivity.forEach(a => {
+                   const ent = (a.entity || '').toLowerCase();
+                   const ico = ent.includes('dossier') ? ['bi-folder-fill','var(--c-dossiers)'] : ent.includes('bon') ? ['bi-cash-coin','var(--c-bons)'] : ent.includes('document') || ent.includes('facture') ? ['bi-receipt','var(--c-facturation)'] : ent.includes('tache') ? ['bi-check2-square','var(--c-taches)'] : ent.includes('client') ? ['bi-person-fill','var(--c-clients)'] : ['bi-dot','var(--ink-400)'];
+                   const known = {
+                     BON_PROVISOIR_CREE: 'a créé un bon provisoire', BON_PROVISOIR_APPROUVE: 'a approuvé un bon provisoire',
+                     BON_PROVISOIR_REJETE: 'a rejeté un bon provisoire', BON_REEL_SOUMIS: 'a soumis un bon réel', FONDS_DECAISSES: 'a confirmé un décaissement',
+                     AJOUT_LIGNE_FACTURE: 'a ajouté une ligne de facture', SUPPRESSION_LIGNE_FACTURE: 'a retiré une ligne de facture',
+                     CREATION_DOCUMENT: 'a émis une facture', MAJ_FACTURE: 'a modifié une facture', SUPPRESSION_DOCUMENT: 'a supprimé une facture',
+                     RECEPTION_PAIEMENT: 'a enregistré un paiement', ANNULATION_PAIEMENT: 'a annulé un paiement',
+                     CREATION_CLIENT: 'a créé un client', CREATION_CLIENT_RAPIDE: 'a créé un client', EDITION_CLIENT: 'a modifié un client', SUPPRESSION_CLIENT: 'a supprimé un client',
+                     OUVERTURE_DOSSIER: 'a ouvert un dossier', DOSSIER_SOUMIS_GUCE: 'a soumis un dossier au GUCE', DOSSIER_VALIDE_GUCE: 'a validé une saisie GUCE',
+                     DOSSIER_SOUMIS_VALIDATION: 'a envoyé un dossier en validation', DOSSIER_VALIDATION_APPROUVEE: 'a approuvé un dossier',
+                     DOSSIER_VALIDATION_REJETEE: 'a rejeté un dossier', DOSSIER_FACTURATION_TERMINEE: 'a terminé la facturation', DOSSIER_CLOTURE_ARCHIVE: 'a clôturé et archivé un dossier',
+                     CREATION_STOCK: 'a ajouté un article au stock', RAVITAILLEMENT_STOCK: 'a réapprovisionné le stock',
+                     CREATE_USER: 'a créé un utilisateur', UPDATE_USER: 'a modifié un utilisateur', RESET_PASSWORD: 'a réinitialisé un mot de passe',
+                     'fichier.uploaded': 'a ajouté un document', 'fichier.deleted': 'a supprimé un document', 'comment.added': 'a commenté',
+                     'tache.status': 'a mis à jour une tâche', 'document.created': 'a émis une facture', SUPPRESSION_TACHE: 'a supprimé une tâche'
+                   };
+                   let label = known[a.action];
+                   if (!label && /^VISA_/.test(a.action || '')) label = (a.action.endsWith('RETIRE') ? 'a retiré son visa ' : 'a apposé son visa ') + a.action.split('_')[1];
+                   if (!label) { const raw = (a.action || '').replace(/[._]/g, ' ').toLowerCase(); label = raw; }
+                   const who = a.user ? [a.user.prenom && !/^(PDG|DG|DGA|DAF)$/i.test(a.user.prenom) ? a.user.prenom : '', a.user.nom].filter(Boolean).join(' ') : 'Système';
+              %>
+                <li>
+                  <span class="f-ico" style="color:<%= ico[1] %>;background:color-mix(in srgb, <%= ico[1] %> 12%, white)"><i class="bi <%= ico[0] %>"></i></span>
+                  <div class="min-w-0">
+                    <div class="f-t"><b><%= who %></b> <%= label %><% if (a.entity_id) { %> <span class="text-muted">#<%= a.entity_id %></span><% } %></div>
+                    <div class="f-d"><%= timeAgo(a.created_at) %></div>
+                  </div>
+                </li>
+              <% }) %>
+            </ul>
+          <% } else { %>
+            <div class="empty-state py-3"><span class="small">Aucune activité récente.</span></div>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<%- include('../partials/footer') %>

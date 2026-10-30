@@ -1,0 +1,15 @@
+<%- include('../partials/header') %>
+
+<div class="err-page err-403">
+  <div class="err-code">403</div>
+  <span class="err-ico"><i class="bi bi-shield-lock"></i></span>
+  <h1 class="h3 mb-2">Accès refusé</h1>
+  <p class="text-muted mb-4"><%= typeof message !== 'undefined' ? message : "Votre rôle ne donne pas accès à cette page. Contactez l'administrateur si vous pensez qu'il s'agit d'une erreur." %></p>
+
+  <div class="d-flex justify-content-center gap-2 flex-wrap">
+    <a href="/dashboard" class="btn btn-primary"><i class="bi bi-grid-1x2 me-2"></i>Tableau de bord</a>
+    <a href="javascript:history.back()" class="btn btn-light"><i class="bi bi-arrow-left me-2"></i>Retour</a>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

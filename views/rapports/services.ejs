@@ -1,0 +1,74 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const maxBar = Math.max(1, ...list.map(r => Math.max(r.facture, r.depenses + r.fournisseurs + r.salaires)));
+  const fmtD = (d) => new Date(d + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-graph-up"></i></span>
+  <div class="flex-grow-1">
+    <h1>Résultat par service</h1>
+    <p class="mb-0">Ce que chaque service a facturé et dépensé du <%= fmtD(du) %> au <%= fmtD(au) %>. Montants en FCFA hors taxes.</p>
+  </div>
+  <div class="ph-actions"><button class="btn btn-light btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button></div>
+</div>
+
+<form class="svc-filter card card-body mb-4" method="GET">
+  <div><label class="form-label small mb-1">Du</label><input type="date" name="du" class="form-control form-control-sm" value="<%= du %>"></div>
+  <div><label class="form-label small mb-1">Au</label><input type="date" name="au" class="form-control form-control-sm" value="<%= au %>"></div>
+  <button class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Afficher</button>
+  <div class="svc-quick">
+    <% const t = new Date(), iso = (d) => d.toISOString().slice(0, 10); %>
+    <a href="?du=<%= iso(new Date(t.getFullYear(), t.getMonth(), 1)) %>&au=<%= iso(t) %>">Ce mois</a>
+    <a href="?du=<%= iso(new Date(t.getFullYear(), t.getMonth() - 1, 1)) %>&au=<%= iso(new Date(t.getFullYear(), t.getMonth(), 0)) %>">Mois dernier</a>
+    <a href="?du=<%= t.getFullYear() %>-01-01&au=<%= iso(t) %>">Cette année</a>
+  </div>
+</form>
+
+<div class="row g-3 mb-4 kpi-compact">
+  <% [
+    ['Facturé', total.facture, 'bi-receipt-cutoff', 'var(--step-7)'],
+    ['Encaissé', total.encaisse, 'bi-wallet2', 'var(--c-facturation)'],
+    ['Dépenses caisse', total.depenses, 'bi-cash-stack', 'var(--step-5)'],
+    ['Factures fournisseurs', total.fournisseurs, 'bi-truck', 'var(--c-compta)'],
+    ['Salaires (coût total)', total.salaires, 'bi-people', 'var(--c-rh)'],
+    ['Résultat', total.resultat, 'bi-graph-up-arrow', total.resultat >= 0 ? 'var(--c-dashboard)' : '#dc2626'],
+  ].forEach(([l, v, i, c]) => { %>
+    <div class="col-6 col-md-4 col-xl">
+      <div class="kpi h-100" style="--k: <%= c %>">
+        <span class="k-ico"><i class="bi <%= i %>"></i></span>
+        <div class="k-label"><%= l %></div>
+        <div class="k-value"><%= F(v) %> <small>F</small></div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<% const calmes = list.filter(r => r.id !== null && !r.facture && !r.encaisse && !r.depenses && !r.fournisseurs && !r.salaires); const actifs = list.filter(r => !calmes.includes(r)); %>
+<div class="svc-report">
+  <% actifs.forEach(r => { const out = r.depenses + r.fournisseurs + r.salaires; const cats = Object.entries(r.cats).filter(c => c[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 4); %>
+    <div class="svc-row <%= r.id === null ? 'none' : '' %>" style="--d: <%= r.couleur %>">
+      <div class="svc-row-head">
+        <span class="svc-ico"><i class="bi <%= r.icone %>"></i></span>
+        <b><%= r.nom %></b>
+        <span class="svc-res <%= r.resultat >= 0 ? 'pos' : 'neg' %>"><%= r.resultat >= 0 ? '+' : '' %><%= F(r.resultat) %></span>
+      </div>
+      <div class="svc-bars">
+        <div class="svc-bar"><span>Facturé</span><i style="width: <%= (r.facture / maxBar * 100).toFixed(1) %>%" class="in"></i><em><%= F(r.facture) %><% if (r.nbFactures) { %> · <%= r.nbFactures %> fact.<% } %></em></div>
+        <div class="svc-bar"><span>Dépensé</span><i style="width: <%= (Math.max(0, out) / maxBar * 100).toFixed(1) %>%" class="out"></i><em><%= F(out) %></em></div>
+      </div>
+      <div class="svc-detail">
+        <span>Encaissé <b><%= F(r.encaisse) %></b></span>
+        <span>Caisse <b><%= F(r.depenses) %></b></span>
+        <span>Fournisseurs <b><%= F(r.fournisseurs) %></b></span>
+        <% if (r.salaires) { %><span>Salaires <b><%= F(r.salaires) %></b></span><% } %>
+        <% cats.forEach(([c, m]) => { %><span class="svc-cat"><%= LABELS[c] || c %> <b><%= F(m) %></b></span><% }) %>
+      </div>
+      <% if (r.id === null) { %><div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Mouvements enregistrés sans service, souvent parce que leur auteur n'appartient à aucun service.</div><% } %>
+    </div>
+  <% }) %>
+  <% if (calmes.length) { %><div class="svc-calm"><i class="bi bi-dash-circle me-1"></i>Sans mouvement sur la période : <% calmes.forEach((r, i) => { %><span class="dept-chip" style="--d: <%= r.couleur %>"><i class="bi <%= r.icone %>"></i><%= r.nom %></span><% }) %></div><% } %>
+  <% if (!list.length) { %><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-graph-up"></i></div><b>Aucun mouvement sur cette période</b></div><% } %>
+</div>
+<p class="small text-muted mt-3">Résultat = facturé − dépenses de caisse − factures fournisseurs − salaires (coût total des paies validées du mois, charges patronales comprises). Les approvisionnements de caisse et les versements en banque ne sont pas des dépenses ; un reliquat rendu à la caisse réduit la dépense.</p>
+<%- include('../partials/footer') %>

@@ -1,0 +1,360 @@
+<%- include('../partials/header') %>
+<%
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const modeL = { ESPECES: 'Espèces', CHEQUE: 'Chèque', VIREMENT: 'Virement', MOBILE_MONEY: 'Mobile money' };
+  const nom = (u) => u ? [u.prenom, u.nom].filter(Boolean).join(' ') : '—';
+  const totalAPayer = aPayer.reduce((t, b) => t + b.montant_demande, 0);
+  const totalVisa = enVisa.reduce((t, b) => t + b.montant_demande, 0);
+  const totalImpaye = impayees.reduce((t, d) => t + d.reste, 0);
+  const aRecevoir = regul.filter(r => r.du > 0).reduce((t, r) => t + r.du, 0);
+  const aVerser = regul.filter(r => r.du < 0).reduce((t, r) => t - r.du, 0);
+  const soldeFin = soldeAvant + entreesPeriode - sortiesPeriode;
+  // Ce qui attend la caisse, regroupé : un bouton par file, un seul panneau ouvert
+  const queues = [
+    { id: 'q-payer', icon: 'bi-cash-coin', label: 'À payer', n: aPayer.length, meta: aPayer.length ? f(totalAPayer) + ' F' : 'Rien à payer', color: '#16a34a' },
+    { id: 'q-regul', icon: 'bi-arrow-left-right', label: 'Reliquats', n: regul.length, meta: regul.length ? (aRecevoir ? '+' + f(aRecevoir) + ' F à recevoir' : '') + (aRecevoir && aVerser ? ' · ' : '') + (aVerser ? f(aVerser) + ' F à payer' : '') || 'Sans écart, à confirmer' : 'Rien à solder', color: '#0d9488' },
+    { id: 'q-comptes', icon: 'bi-person-check', label: 'Dépôts & retraits', n: demandesComptes.length, meta: demandesComptes.length ? demandesComptes.length + ' à confirmer' : 'Aucune demande', color: '#0d9488' },
+    { id: 'q-visa', icon: 'bi-hourglass-split', label: 'En cours de visa', n: enVisa.length, meta: enVisa.length ? f(totalVisa) + ' F à venir' : 'Aucun bon', color: '#10b981' },
+    { id: 'q-factures', icon: 'bi-receipt', label: 'Factures à encaisser', n: impayees.length, meta: impayees.length ? f(totalImpaye) + ' F' : 'Tout est encaissé', color: '#0d9488' },
+  ];
+  const firstOpen = (queues.find(q => q.n) || queues[0]).id;
+  // Journal regroupé par jour, du plus récent au plus ancien
+  const days = [];
+  lignes.slice().reverse().forEach(m => {
+    const k = new Date(m.date).toDateString();
+    let d = days[days.length - 1];
+    if (!d || d.k !== k) { d = { k, date: m.date, items: [], e: 0, s: 0 }; days.push(d); }
+    d.items.push(m); if (m.sens === 'ENTREE') d.e += m.montant; else d.s += m.montant;
+  });
+  const dayLabel = (dt) => {
+    const t = new Date(); t.setHours(0, 0, 0, 0); const x = new Date(dt); x.setHours(0, 0, 0, 0);
+    const diff = Math.round((t - x) / 864e5);
+    return diff === 0 ? "Aujourd'hui" : diff === 1 ? 'Hier' : new Date(dt).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+  const filtered = filtre.sens || filtre.categorie;
+%>
+
+<!-- Solde et actions -->
+<section class="cx-hero">
+  <%- include('../partials/_hero_fx', { icons: ['bi-coin', 'bi-cash-stack', 'bi-safe2', 'bi-arrow-left-right'] }) %>
+  <div class="cx-hero-main">
+    <div class="cx-label"><i class="bi bi-safe2-fill"></i>Solde de la caisse</div>
+    <div class="cx-balance <%= soldeActuel < 0 ? 'neg' : '' %>"><%= f(soldeActuel) %><small>F CFA</small></div>
+    <div class="cx-today">
+      <span class="up"><i class="bi bi-arrow-down-left"></i>+<%= f(entreesJour) %> F</span>
+      <span class="down"><i class="bi bi-arrow-up-right"></i>−<%= f(sortiesJour) %> F</span>
+      <span class="muted">aujourd'hui</span>
+    </div>
+    <div class="cx-close-info">
+      <% if (lastCloture) { %>
+        <i class="bi bi-lock-fill"></i>Dernière clôture le <%= new Date(lastCloture.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' }) %>
+        <%= Math.abs(lastCloture.ecart) >= 1 ? '· écart de ' + f(lastCloture.ecart) + ' F' : '· caisse juste' %>
+      <% } else { %><i class="bi bi-unlock"></i>Aucune clôture enregistrée<% } %>
+    </div>
+  </div>
+  <% if (canWrite) { %>
+    <div class="cx-actions">
+      <button class="cx-btn in" data-bs-toggle="modal" data-bs-target="#mvtModal" data-sens="ENTREE"><i class="bi bi-plus-lg"></i><span>Entrée</span></button>
+      <button class="cx-btn out" data-bs-toggle="modal" data-bs-target="#mvtModal" data-sens="SORTIE"><i class="bi bi-dash-lg"></i><span>Sortie</span></button>
+      <button class="cx-btn lock" data-bs-toggle="modal" data-bs-target="#clotureModal"><i class="bi bi-lock"></i><span>Clôturer</span></button>
+      <a class="cx-btn acc" href="/comptes"><i class="bi bi-person-lines-fill"></i><span>Comptes</span></a>
+    </div>
+  <% } %>
+</section>
+
+<!-- À traiter -->
+<section class="dsec-wrap" id="a-traiter">
+  <div class="dsec-head">
+    <span class="dsec-ico"><i class="bi bi-inboxes-fill"></i></span>
+    <div class="flex-grow-1"><h6 class="mb-0">À traiter</h6><span>Les bons, régularisations et factures qui attendent la caisse.</span></div>
+    <a href="/bons/provisoir/pending" class="btn btn-light btn-sm">Tous les bons <i class="bi bi-arrow-right"></i></a>
+  </div>
+  <div class="dsec-tiles cx-tiles">
+    <% queues.forEach(q => { %>
+      <button type="button" class="dsec-tile <%= q.id === firstOpen ? '' : 'collapsed' %>" style="--tc: <%= q.color %>" data-bs-toggle="collapse" data-bs-target="#<%= q.id %>" aria-expanded="<%= q.id === firstOpen %>">
+        <span class="dt-ico"><i class="bi <%= q.icon %>"></i></span>
+        <span class="dt-txt"><b><%= q.label %></b><small><%= q.meta %></small></span>
+        <span class="cx-count <%= q.n ? '' : 'zero' %>"><%= q.n %></span>
+      </button>
+    <% }) %>
+  </div>
+  <div id="cxPanels">
+    <!-- À payer -->
+    <div class="collapse dsec-panel <%= firstOpen === 'q-payer' ? 'show' : '' %>" id="q-payer" data-bs-parent="#cxPanels"><div class="dsec-body">
+      <% if (!aPayer.length) { %><div class="cx-empty"><i class="bi bi-check2-all"></i>Aucun bon prêt à payer.</div><% } %>
+      <div class="cx-list">
+        <% aPayer.forEach(b => { const p = visaProgress(b); %>
+          <a href="/bons/<%= b.id %>" class="cx-row">
+            <span class="cx-av" style="--c:#16a34a"><i class="bi <%= b.dossier ? 'bi-folder2' : 'bi-wallet2' %>"></i></span>
+            <span class="cx-main"><b><%= b.numero %><% if (b.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %></b><small><%= b.dossier ? 'Dossier ' + b.dossier.numero : 'Dépense interne' %> · <%= nom(b.demandeur) %> · <%= b.objet %></small></span>
+            <span class="cx-tag <%= b.ordre_paiement_by && p.missing.length ? 'order' : 'ok' %>"><%= b.ordre_paiement_by && p.missing.length ? 'Sur ordre' : 'Visas complets' %></span>
+            <b class="cx-amt"><%= f(b.montant_demande) %> F</b>
+          </a>
+        <% }) %>
+      </div>
+      <% if (aPayer.length) { %><div class="cx-foot">Ouvrez un bon pour le payer, ou payez-les depuis <a href="/bons/provisoir/pending">la liste des bons</a>.</div><% } %>
+    </div></div>
+
+    <!-- Reliquats : chaque bon justifié qui attend la caisse, soldé en un clic -->
+    <div class="collapse dsec-panel <%= firstOpen === 'q-regul' ? 'show' : '' %>" id="q-regul" data-bs-parent="#cxPanels"><div class="dsec-body">
+      <% if (!regul.length) { %><div class="cx-empty"><i class="bi bi-check2-all"></i>Aucun reliquat à solder.</div><% } %>
+      <div class="cx-list">
+        <% regul.forEach(r => { %>
+          <div class="cx-row">
+            <span class="cx-av" style="--c:<%= r.du > 0 ? '#16a34a' : r.du < 0 ? '#dc2626' : '#64748b' %>"><i class="bi <%= r.du > 0 ? 'bi-arrow-down-left' : r.du < 0 ? 'bi-arrow-up-right' : 'bi-check2' %>"></i></span>
+            <span class="cx-main"><b><a href="/bons/<%= r.bon_provisoir.id %>"><%= r.bon_provisoir.numero %></a><% if (r.bon_provisoir.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %></b><small><%= r.porteur %> · <%= r.bon_provisoir.objet %><%= r.bon_provisoir.dossier ? ' · ' + r.bon_provisoir.dossier.numero : '' %><%= r.rendu > 0 ? ' · ' + f(r.rendu) + ' F déjà rendus' : '' %></small></span>
+            <b class="cx-amt <%= r.du > 0 ? 'in' : r.du < 0 ? 'out' : '' %>"><%= r.du > 0 ? '+' + f(r.du) + ' F à recevoir' : r.du < 0 ? f(-r.du) + ' F à payer' : 'Sans écart' %></b>
+            <% if (canWrite) { %>
+              <form method="POST" action="/caisse/regulariser/<%= r.id %>" class="m-0" onsubmit="return confirm('<%= r.du > 0 ? 'Confirmer : ' + f(r.du) + ' F reçus de ' + r.porteur.replace(/'/g, ' ') + ' ?' : r.du < 0 ? 'Créer un bon supplémentaire de ' + f(-r.du) + ' F pour ' + r.porteur.replace(/'/g, ' ') + ' ? Il suivra les visas avant le paiement.' : 'Confirmer la régularisation ?' %>')">
+                <button class="btn btn-sm <%= r.du > 0 ? 'btn-success' : r.du < 0 ? 'btn-danger' : 'btn-outline-secondary' %> rounded-pill"><%= r.du > 0 ? 'Encaisser' : r.du < 0 ? 'Bon supplémentaire' : 'Confirmer' %></button>
+              </form>
+            <% } %>
+          </div>
+        <% }) %>
+      </div>
+    </div></div>
+
+    <!-- Demandes de dépôt ou de retrait sur un compte : rien ne bouge avant la confirmation -->
+    <div class="collapse dsec-panel <%= firstOpen === 'q-comptes' ? 'show' : '' %>" id="q-comptes" data-bs-parent="#cxPanels"><div class="dsec-body">
+      <% if (!demandesComptes.length) { %><div class="cx-empty"><i class="bi bi-check2-all"></i>Aucune demande de compte en attente.</div><% } %>
+      <div class="cx-list">
+        <% demandesComptes.forEach(d => { const own = d.demandeur_id === user.id || d.personne_id === user.id; %>
+          <div class="cx-row">
+            <span class="cx-av" style="--c:<%= d.sens === 'ENTREE' ? '#16a34a' : '#dc2626' %>"><i class="bi <%= d.sens === 'ENTREE' ? 'bi-arrow-down-left' : 'bi-arrow-up-right' %>"></i></span>
+            <span class="cx-main"><b><a href="<%= d.compteLien %>"><%= d.compteNom %></a></b><small><%= d.sens === 'ENTREE' ? 'Dépôt' : 'Retrait' %> demandé par <%= d.demandeur %> · <%= new Date(d.created_at).toLocaleDateString('fr-FR') %><%= d.banque ? ' · ' + d.banque : '' %><%= d.motif ? ' · ' + d.motif : '' %></small></span>
+            <b class="cx-amt <%= d.sens === 'ENTREE' ? 'in' : 'out' %>"><%= d.sens === 'ENTREE' ? '+' : '−' %><%= f(d.montant) %> F</b>
+            <% if (canWrite && !own) { %>
+              <form method="POST" action="/comptes/demandes/<%= d.id %>/confirmer" class="m-0"><button class="btn btn-sm btn-success rounded-pill">Confirmer</button></form>
+              <form method="POST" action="/comptes/demandes/<%= d.id %>/refuser" class="m-0" onsubmit="var m = prompt('Motif du refus (facultatif)'); if (m === null) return false; this.motif.value = m;"><input type="hidden" name="motif"><button class="btn btn-sm btn-outline-danger rounded-pill">Refuser</button></form>
+            <% } else if (own) { %><span class="small text-muted">Un autre agent doit confirmer</span><% } %>
+          </div>
+        <% }) %>
+      </div>
+    </div></div>
+
+    <!-- En cours de visa -->
+    <div class="collapse dsec-panel <%= firstOpen === 'q-visa' ? 'show' : '' %>" id="q-visa" data-bs-parent="#cxPanels"><div class="dsec-body">
+      <% if (!enVisa.length) { %><div class="cx-empty"><i class="bi bi-check2-all"></i>Aucun bon en attente de visa.</div><% } %>
+      <div class="cx-list">
+        <% enVisa.forEach(b => { const p = visaProgress(b); %>
+          <a href="/bons/<%= b.id %>" class="cx-row">
+            <span class="cx-av" style="--c:#10b981"><i class="bi bi-hourglass-split"></i></span>
+            <span class="cx-main"><b><%= b.numero %><% if (b.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %></b><small><%= b.dossier ? 'Dossier ' + b.dossier.numero : 'Dépense interne' %> · <%= nom(b.demandeur) %> · <%= b.objet %></small></span>
+            <span class="cx-visa"><span class="cx-visa-bar"><i style="width: <%= p.total ? Math.round(p.count / p.total * 100) : 0 %>%"></i></span><small><%= p.count %>/<%= p.total %> visas</small></span>
+            <b class="cx-amt"><%= f(b.montant_demande) %> F</b>
+          </a>
+        <% }) %>
+      </div>
+    </div></div>
+
+    <!-- Factures à encaisser -->
+    <div class="collapse dsec-panel <%= firstOpen === 'q-factures' ? 'show' : '' %>" id="q-factures" data-bs-parent="#cxPanels"><div class="dsec-body">
+      <% if (!impayees.length) { %><div class="cx-empty"><i class="bi bi-check2-all"></i>Toutes les factures sont encaissées.</div><% } %>
+      <div class="cx-list">
+        <% impayees.slice(0, 30).forEach(d => { %>
+          <div class="cx-row">
+            <span class="cx-av" style="--c:#0d9488"><i class="bi bi-receipt"></i></span>
+            <span class="cx-main"><b><a href="/facturation/<%= d.id %>"><%= d.numero %></a></b><small><%= d.client %></small></span>
+            <b class="cx-amt"><%= f(d.reste) %> F</b>
+            <% if (canWrite) { %><button type="button" class="btn btn-sm btn-outline-primary rounded-pill" data-bs-toggle="modal" data-bs-target="#mvtModal" data-sens="ENTREE" data-doc="<%= d.id %>" data-reste="<%= d.reste %>">Encaisser</button><% } %>
+          </div>
+        <% }) %>
+      </div>
+    </div></div>
+  </div>
+</section>
+
+<!-- Journal -->
+<section class="cx-journal" id="journal">
+  <div class="cx-j-head">
+    <div class="d-flex align-items-center gap-3 flex-grow-1">
+      <span class="dsec-ico"><i class="bi bi-journal-text"></i></span>
+      <div><h6 class="mb-0">Journal de caisse</h6><span class="small text-muted">Du <%= new Date(filtre.du).toLocaleDateString('fr-FR') %> au <%= new Date(filtre.au).toLocaleDateString('fr-FR') %><%= filtered ? ' · filtré' : '' %></span></div>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-light btn-sm <%= filtered ? 'active' : '' %>" type="button" data-bs-toggle="collapse" data-bs-target="#cxFilters"><i class="bi bi-sliders me-1"></i>Filtres</button>
+      <a class="btn btn-light btn-sm" href="/caisse?du=<%= filtre.du %>&au=<%= filtre.au %>&sens=<%= filtre.sens %>&categorie=<%= filtre.categorie %>&format=csv" title="Exporter pour Excel"><i class="bi bi-download me-1"></i>Excel</a>
+    </div>
+  </div>
+  <div class="collapse <%= filtered ? 'show' : '' %>" id="cxFilters">
+    <form class="row g-2 align-items-end cx-filters" method="GET" action="/caisse">
+      <div class="col-6 col-md-2"><label class="form-label small mb-1">Du</label><input type="date" name="du" value="<%= filtre.du %>" class="form-control form-control-sm"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-1">Au</label><input type="date" name="au" value="<%= filtre.au %>" class="form-control form-control-sm"></div>
+      <div class="col-6 col-md-2"><label class="form-label small mb-1">Sens</label><select name="sens" class="form-select form-select-sm"><option value="">Tout</option><option value="ENTREE" <%= filtre.sens === 'ENTREE' ? 'selected' : '' %>>Entrées</option><option value="SORTIE" <%= filtre.sens === 'SORTIE' ? 'selected' : '' %>>Sorties</option></select></div>
+      <div class="col-6 col-md-3"><label class="form-label small mb-1">Catégorie</label><select name="categorie" class="form-select form-select-sm"><option value="">Toutes</option><% Object.entries(LABELS).forEach(([k, l]) => { %><option value="<%= k %>" <%= filtre.categorie === k ? 'selected' : '' %>><%= l %></option><% }) %></select></div>
+      <div class="col-12 col-md-3 d-flex gap-2"><button class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel me-1"></i>Appliquer</button><a class="btn btn-light btn-sm" href="/caisse">Effacer</a></div>
+    </form>
+  </div>
+  <div class="cx-sum">
+    <div><span>Solde au début</span><b><%= f(soldeAvant) %> F</b></div>
+    <div class="in"><span>Entrées</span><b>+<%= f(entreesPeriode) %> F</b></div>
+    <div class="out"><span>Sorties</span><b>−<%= f(sortiesPeriode) %> F</b></div>
+    <div class="end"><span>Solde à la fin</span><b><%= f(soldeFin) %> F</b></div>
+  </div>
+  <div class="cx-days">
+    <% if (!days.length) { %><div class="cx-empty py-5"><i class="bi bi-journal"></i>Aucun mouvement sur cette période.</div><% } %>
+    <% days.forEach((d, di) => { %>
+      <details class="cx-day" <%= di === 0 ? 'open' : '' %>>
+        <summary class="cx-day-head"><b><i class="bi bi-chevron-right cx-day-chev"></i><%= dayLabel(d.date) %><em><%= d.items.length %> mouvement<%= d.items.length > 1 ? 's' : '' %></em></b><span><span class="in">+<%= f(d.e) %></span> <span class="out">−<%= f(d.s) %></span></span></summary>
+        <% d.items.forEach((m, mi) => { const isE = m.sens === 'ENTREE'; %>
+          <div class="cx-mv <%= mi >= 8 ? 'cx-more' : '' %>">
+            <span class="cx-av sm" style="--c:<%= isE ? '#16a34a' : '#dc2626' %>"><i class="bi <%= isE ? 'bi-arrow-down-left' : 'bi-arrow-up-right' %>"></i></span>
+            <div class="cx-main">
+              <b><%= m.libelle %></b>
+              <small>
+                <span class="cx-cat"><%= m.catLabel %></span><% if (m.departement) { %><span class="dept-chip" style="--d: <%= m.departement.couleur %>"><%= m.departement.nom %></span><% } %>
+                <%= new Date(m.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) %> · <%= modeL[m.mode] || m.mode %><%= m.banque ? ' · ' + m.banque : '' %><%= m.reference ? ' · ' + m.reference : '' %><% if (m.representant_id) { %> · <a href="/comptes/representant/<%= m.representant_id %>"><%= m.tiers || 'compte' %></a><% } else if (m.personne_id) { %> · <a href="/comptes/personnel/<%= m.personne_id %>"><%= m.tiers || 'compte' %></a><% } else { %><%= m.tiers ? ' · ' + m.tiers : '' %><% } %>
+                <% if (m.dossier) { %> · <a href="/dossiers/<%= m.dossier.id %>"><%= m.dossier.numero %></a><% } %><% if (m.bon) { %> · <a href="/bons/<%= m.bon.id %>"><%= m.bon.numero %></a><% } %>
+                · <%= nom(m.user) %>
+              </small>
+            </div>
+            <div class="cx-mv-amt">
+              <b class="<%= isE ? 'in' : 'out' %>"><%= isE ? '+' : '−' %><%= f(m.montant) %> F</b>
+              <small>Solde <%= f(m.solde) %> F</small>
+            </div>
+          </div>
+        <% }) %>
+        <% if (d.items.length > 8) { %><button type="button" class="cx-showmore" data-cx-more>Voir les <%= d.items.length - 8 %> autres mouvements</button><% } %>
+      </details>
+    <% }) %>
+  </div>
+</section>
+
+<script>
+  document.querySelectorAll('[data-cx-more]').forEach(function (b) {
+    b.addEventListener('click', function () { b.closest('.cx-day').classList.add('all'); b.remove(); });
+  });
+</script>
+<% if (canWrite) { %>
+<div class="modal fade" id="mvtModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content cx-modal" action="/caisse/mouvement" method="POST">
+      <div class="modal-header"><h5 class="modal-title" id="mvtTitle">Entrée d'argent</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+      <div class="modal-body row g-2 ops-form">
+        <input type="hidden" name="sens" id="mvtSens" value="ENTREE">
+        <div class="col-12"><label class="form-label">Catégorie</label>
+          <select name="categorie" class="form-select form-select-sm" id="mvtCatE"><% ENTREE_CATEGORIES.forEach(c => { %><option value="<%= c.key %>"><%= c.label %></option><% }) %></select>
+          <select class="form-select form-select-sm" id="mvtCatS" hidden disabled><% SORTIE_CATEGORIES.forEach(c => { %><option value="<%= c.key %>"><%= c.label %></option><% }) %></select>
+        </div>
+        <div class="col-12" id="mvtFacture"><label class="form-label">Facture réglée (facultatif)</label>
+          <select name="document_id" id="mvtDoc" class="form-select form-select-sm"><option value="">Aucune</option><% impayees.forEach(d => { %><option value="<%= d.id %>"><%= d.numero %> · <%= d.client %> · reste <%= f(d.reste) %> F</option><% }) %></select>
+          <div class="form-text">Le paiement sera aussi inscrit sur la facture et en comptabilité.</div>
+        </div>
+        <div class="col-12" id="mvtRegul" hidden>
+          <label class="form-label">Bon à solder <span class="text-danger">*</span></label>
+          <div class="cx-pick">
+            <% regul.forEach(r => { %>
+              <label class="cx-pick-row" data-dir="<%= r.du > 0 ? 'in' : r.du < 0 ? 'out' : 'zero' %>"><input type="radio" name="bon_reel_id" value="<%= r.id %>">
+                <span><b><%= r.bon_provisoir.numero %></b> · <%= r.porteur %><small><%= r.bon_provisoir.objet %></small></span>
+                <em class="<%= r.du > 0 ? 'in' : 'out' %>"><%= r.du > 0 ? '+' + f(r.du) : f(-r.du) %> F</em></label>
+            <% }) %>
+            <div class="cx-pick-empty small text-muted" hidden>Aucun bon dans ce cas pour le moment.</div>
+          </div>
+          <div class="form-text">Le montant est celui du bon : un clic sur Enregistrer solde le bon.</div>
+        </div>
+        <div class="col-12" id="mvtRetour" hidden><label class="form-label">Bon payé dont l'argent revient <span class="text-danger">*</span></label>
+          <select name="bon_id" id="mvtBon" class="form-select form-select-sm"><option value="">Choisir le bon…</option><% retours.forEach(b => { %><option value="<%= b.id %>" data-reste="<%= b.reste %>"><%= b.numero %> · <%= b.porteur %> · <%= b.objet %> · reste <%= f(b.reste) %> F</option><% }) %></select>
+          <div class="form-text">Tout rendu : le bon est clos. Une partie : elle sera déduite quand le bon sera justifié.</div>
+        </div>
+        <div class="col-6" id="mvtMontantCol"><label class="form-label">Montant (F)</label><input name="montant" id="mvtMontant" inputmode="decimal" class="form-control form-control-sm" data-money required></div>
+        <div class="col-6"><label class="form-label">Mode</label><select name="mode" id="mvtMode" class="form-select form-select-sm"><% Object.entries(modeL).forEach(([k, l]) => { %><option value="<%= k %>"><%= l %></option><% }) %></select></div>
+        <div class="col-12" id="mvtBanqueCol" hidden><label class="form-label">Banque <span class="text-danger" id="mvtBanqueReq">*</span></label>
+          <select name="banque" id="mvtBanque" class="form-select form-select-sm"><option value="">Choisir la banque…</option><% banques.forEach(bq => { %><option value="<%= bq.nom %>"><%= bq.nom %><%= bq.numero_compte ? ' · ' + bq.numero_compte : '' %></option><% }) %></select></div>
+        <div class="col-12" id="mvtCompteCol"><label class="form-label" id="mvtCompteLbl">Compte (représentant ou employé)</label>
+          <select name="compte" id="mvtCompte" class="form-select form-select-sm"><option value="">Aucun</option>
+            <optgroup label="Représentants"><% comptes.reps.forEach(r => { %><option value="R:<%= r.id %>"><%= [r.prenom, r.nom].filter(Boolean).join(' ') %><%= r.client_representants.length ? ' · ' + r.client_representants.map(c => c.client.nom).join(', ') : '' %></option><% }) %></optgroup>
+          </select>
+          <div class="form-text" id="mvtCompteHint">Le mouvement apparaît sur le relevé de la personne.</div></div>
+        <div class="col-12"><label class="form-label">Libellé</label><input name="libelle" class="form-control form-control-sm" placeholder="ex. Règlement client, versement banque…"></div>
+        <div class="col-6"><label class="form-label">Tiers</label><input name="tiers" class="form-control form-control-sm" placeholder="Client, banque…"></div>
+        <div class="col-6"><label class="form-label">Référence</label><input name="reference" class="form-control form-control-sm" placeholder="N° chèque, reçu…"></div>
+        <div class="col-6"><label class="form-label">Date</label><input type="date" name="date" class="form-control form-control-sm" value="<%= new Date().toISOString().slice(0, 10) %>"></div>
+        <div class="col-6"><label class="form-label">Service</label><select name="departement_id" class="form-select form-select-sm"><option value="">Automatique</option><% services.forEach(s => { %><option value="<%= s.id %>"><%= s.nom %></option><% }) %></select></div>
+        <div class="col-12 small text-muted" id="mvtHint">Les dépenses des services passent par un bon (Dépenses internes) avec visas. Utilisez une sortie directe seulement pour un versement en banque ou une opération exceptionnelle.</div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary">Enregistrer</button></div>
+    </form>
+  </div>
+</div>
+
+<div class="modal fade" id="clotureModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content cx-modal" action="/caisse/cloture" method="POST">
+      <div class="modal-header"><h5 class="modal-title">Clôturer la journée</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+      <div class="modal-body">
+        <div class="cx-expected"><span>Solde attendu</span><b><%= f(soldeActuel) %> F</b></div>
+        <label class="form-label mt-3">Argent compté dans la caisse (F)</label>
+        <input name="solde_compte" id="clotCompte" inputmode="decimal" class="form-control form-control-lg" required placeholder="<%= f(soldeActuel) %>" data-expected="<%= soldeActuel %>">
+        <div class="cx-ecart" id="clotEcart" hidden></div>
+        <label class="form-label mt-3">Observations</label>
+        <input name="observations" class="form-control form-control-sm" placeholder="Facultatif">
+        <div class="form-text mt-2">Un écart est signalé automatiquement au DAF.</div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button class="btn btn-dark"><i class="bi bi-lock me-1"></i>Clôturer</button></div>
+    </form>
+  </div>
+</div>
+<script>
+  document.getElementById('mvtModal').addEventListener('show.bs.modal', function (e) {
+    var t = e.relatedTarget, sens = (t && t.getAttribute('data-sens')) || 'ENTREE', isE = sens === 'ENTREE';
+    document.getElementById('mvtSens').value = sens;
+    document.getElementById('mvtTitle').textContent = isE ? "Entrée d'argent" : "Sortie d'argent";
+    var ce = document.getElementById('mvtCatE'), cs = document.getElementById('mvtCatS');
+    ce.hidden = !isE; ce.disabled = !isE; ce.name = isE ? 'categorie' : '';
+    cs.hidden = isE; cs.disabled = isE; cs.name = isE ? '' : 'categorie';
+    var doc = t && t.getAttribute('data-doc');
+    if (isE && doc) { ce.value = 'REGLEMENT_CLIENT'; document.getElementById('mvtDoc').value = doc; document.getElementById('mvtMontant').value = Math.round(t.getAttribute('data-reste')); }
+    else if (isE) { document.getElementById('mvtDoc').value = ''; }
+    document.getElementById('mvtFacture').hidden = !isE || ce.value !== 'REGLEMENT_CLIENT';
+    document.getElementById('mvtHint').hidden = isE;
+  });
+  function mvtSync() {
+    var isE = document.getElementById('mvtSens').value === 'ENTREE';
+    var cat = (isE ? document.getElementById('mvtCatE') : document.getElementById('mvtCatS')).value;
+    var mode = document.getElementById('mvtMode').value;
+    var show = function (id, on) { document.getElementById(id).hidden = !on; };
+    var regul = cat === 'RELIQUAT' || cat === 'COMPLEMENT', retour = cat === 'RETOUR_BON';
+    show('mvtFacture', isE && cat === 'REGLEMENT_CLIENT');
+    show('mvtRegul', regul);
+    var dir = cat === 'RELIQUAT' ? 'in' : 'out', vis = 0;
+    document.querySelectorAll('#mvtRegul .cx-pick-row').forEach(function (r) {
+      var on = regul && (r.dataset.dir === dir || r.dataset.dir === 'zero');
+      r.hidden = !on; if (on) vis++; else r.querySelector('input').checked = false;
+      r.querySelector('input').required = regul;
+    });
+    document.querySelector('#mvtRegul .cx-pick-empty').hidden = vis > 0;
+    show('mvtRetour', retour); document.getElementById('mvtBon').required = retour;
+    show('mvtMontantCol', !regul); document.getElementById('mvtMontant').required = !regul;
+    var banque = ['VERSEMENT_BANQUE', 'APPROVISIONNEMENT'].indexOf(cat) >= 0 || mode === 'CHEQUE' || mode === 'VIREMENT';
+    show('mvtBanqueCol', banque);
+    document.getElementById('mvtBanque').required = cat === 'VERSEMENT_BANQUE';
+    document.getElementById('mvtBanqueReq').hidden = cat !== 'VERSEMENT_BANQUE';
+    show('mvtCompteCol', isE && cat === 'REGLEMENT_CLIENT');
+    document.getElementById('mvtCompte').required = cat === 'PAIEMENT_COMPTE';
+    document.getElementById('mvtCompteLbl').textContent = cat === 'REGLEMENT_CLIENT' ? 'Versé par (représentant du client)' : cat === 'PAIEMENT_COMPTE' ? 'Payé à *' : 'Compte (représentant ou employé)';
+    document.getElementById('mvtCompteHint').textContent = cat === 'REGLEMENT_CLIENT' ? 'Le versement est crédité sur le compte du représentant.' : 'Le mouvement apparaît sur le relevé de la personne.';
+  }
+  ['mvtCatE', 'mvtCatS', 'mvtMode'].forEach(function (id) { document.getElementById(id).addEventListener('change', mvtSync); });
+  document.getElementById('mvtModal').addEventListener('shown.bs.modal', mvtSync);
+  document.getElementById('mvtBon').addEventListener('change', function () { var o = this.selectedOptions[0]; if (o && o.dataset.reste) document.getElementById('mvtMontant').value = o.dataset.reste; });
+  document.getElementById('clotCompte').addEventListener('input', function () {
+    var v = parseFloat(this.value.replace(/\s/g, '').replace(',', '.')), exp = parseFloat(this.dataset.expected), el = document.getElementById('clotEcart');
+    if (isNaN(v)) { el.hidden = true; return; }
+    var d = Math.round(v - exp); el.hidden = false;
+    el.className = 'cx-ecart ' + (d === 0 ? 'ok' : 'ko');
+    el.textContent = d === 0 ? 'La caisse est juste.' : 'Écart de ' + (d > 0 ? '+' : '') + d.toLocaleString('fr-FR') + ' F';
+  });
+</script>
+<% } %>
+<script>
+  // Lien direct vers une file (ex. notification « /caisse#q-comptes ») : on l'ouvre
+  window.addEventListener('load', function () {
+    var p = location.hash && document.querySelector('#cxPanels > ' + location.hash.replace(/[^#\w-]/g, ''));
+    if (!p) return;
+    var go = function () { document.querySelector('[data-bs-target="#' + p.id + '"]').scrollIntoView({ block: 'start', behavior: 'smooth' }); };
+    if (p.classList.contains('show')) return go();
+    p.addEventListener('shown.bs.collapse', go, { once: true });
+    document.querySelector('[data-bs-target="#' + p.id + '"]').click();
+  });
+</script>
+<%- include('../partials/footer') %>

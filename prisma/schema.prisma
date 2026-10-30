@@ -1,0 +1,812 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                   Int                 @id @default(autoincrement())
+  nom                  String
+  prenom               String?
+  email                String              @unique
+  password             String
+  role                 String              @default("operationnel")
+  societe              String
+  actif                Boolean             @default(true)
+  force_pwd_change     Boolean             @default(false)
+  last_login           DateTime?
+  created_at           DateTime            @default(now())
+  created_by           Int?
+  departement_id       Int? // service (centre de coût) de l'employé
+  logs                 ActivityLog[]
+  bons_approuves       BonProvisoir[]      @relation("BonApprover")
+  bons_demandes        BonProvisoir[]      @relation("BonDemandeur")
+  bons_reel_confirmes  BonReel[]           @relation("BonReelConfirme")
+  bons_reel_soumis     BonReel[]           @relation("BonReelSoumis")
+  ecritures            EcritureComptable[]
+  taches               Tache[]
+  comments             TacheComment[]
+  dossier_files        DossierFile[]
+  dossier_comments     DossierComment[]
+  notifications        Notification[]
+  client_documents     ClientDocument[]    @relation("UserClientDocuments")
+  dossiers_created     Dossier[]           @relation("DossierCreator")
+  push_subscriptions   PushSubscription[]
+  caisse_mouvements    CaisseMouvement[]   @relation("CaisseMouvementUser")
+  compte_caisse        CaisseMouvement[]   @relation("CaisseMouvementPersonne")
+  caisse_clotures      CaisseCloture[]     @relation("CaisseClotureUser")
+  departement          Departement?        @relation("DepartementMembres", fields: [departement_id], references: [id], onDelete: SetNull)
+  departements_diriges Departement[]       @relation("DepartementResponsable")
+  demandes             Demande[]           @relation("DemandeDemandeur")
+  decisions            DemandeEtape[]      @relation("DemandeEtapeDecideur")
+  fil_messages         FilMessage[]        @relation("FilMessageUser")
+  employe              Employe?            @relation("EmployeCompte")
+}
+
+model Client {
+  id                   Int                  @id @default(autoincrement())
+  nom                  String
+  niu                  String?
+  rccm                 String?
+  adresse              String?
+  tel                  String?
+  societe              String
+  documents            Document[]
+  dossiers             Dossier[]
+  representant         String?
+  statut_initial       String?              @default("IMPORTATEUR")
+  acf                  String?
+  email                String?
+  ref_interne          String?
+  client_documents     ClientDocument[]     @relation("ClientDocuments")
+  client_representants ClientRepresentant[] @relation("ClientReps")
+}
+
+model Dossier {
+  id                 Int              @id @default(autoincrement())
+  numero             String           @unique
+  client_id          Int
+  port               String
+  nature             String
+  etat               String
+  bl                 String           @default("")
+  contenu            String?
+  droits_douane      Float?
+  validation         Boolean          @default(false)
+  valeur_douane      Float?
+  created_at         DateTime         @default(now())
+  fournisseur_nom    String?
+  fournisseur_pays   String?
+  transporteur       String?
+  conteneurs_20      Int?
+  conteneurs_40      Int?
+  representant_libre String?
+  representant_id    Int?
+  representant_obj   Representant?    @relation("DossierRepresentant", fields: [representant_id], references: [id])
+  pipeline_status    String           @default("CREE")
+  numero_ordre       String? // N° de dossier attribué à la transmission au GUCE, ex. 2026-0001 (les dossiers ne comptent qu'à partir de là)
+  rejet_motif        String? // rejet par le secrétariat avant le GUCE, ex. client pas prêt à valider
+  rejet_at           DateTime?
+  rejet_par          String?
+  archived_at        DateTime?
+  bons_provisoir     BonProvisoir[]
+  bons_reel          BonReel[]
+  client             Client           @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  taches             Tache[]
+  files              DossierFile[]
+  comments           DossierComment[]
+  created_by         Int?
+  creator            User?            @relation("DossierCreator", fields: [created_by], references: [id])
+
+  // Déclaration CAMCIS (douane)
+  camcis_numero      String?
+  camcis_date        DateTime?
+  camcis_liquidation Float?
+  camcis_quittance   String?
+  camcis_circuit     String? // VERT, JAUNE, ROUGE
+  gn_numero          String? // N° GN saisi à la validation
+  dau_numero         String? // N° DAU (document administratif unique)
+  articles_json      String? // [{designation, code}] : articles et codes tarifaires déclarés
+  validation_ordre   String? // n° d'ordre de la validation, ex. 2026-10-001 (unicité assurée par le code : un @unique bloquerait le démarrage)
+  validation_at      DateTime? // date de validation de la déclaration
+  visite_date        DateTime?
+  visite_resultat    String?
+  visite_terminee    Boolean   @default(false)
+  bae_numero         String?
+  bae_date           DateTime?
+
+  // Suivi des délais par étape et suivi client
+  stage_entered_at DateTime?
+  sla_alert_at     DateTime?
+  tracking_token   String?
+  stage_logs       DossierStageLog[]
+  documents        Document[]
+
+  // Facture 1 et paiement des droits à la banque
+  droits_paye_montant Float?
+  droits_paye_date    DateTime?
+  droits_banque       String?
+  droits_frais        Float? // frais bancaires inclus dans le total de la facture 1
+  droits_paye_par     String? // CLIENT ou SOCIETE
+  droits_mode         String? // BANQUE ou CAISSE
+  conteneurs          Conteneur[]
+  caisse_mouvements   CaisseMouvement[]
+}
+
+model Conteneur {
+  id         Int      @id @default(autoincrement())
+  dossier_id Int
+  numero     String
+  type       String? // 20, 40, 40HC, 45, FRIGO, AUTRE
+  scelle     String?
+  created_at DateTime @default(now())
+  dossier    Dossier  @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+
+  @@index([dossier_id])
+}
+
+model CaisseMouvement {
+  id              Int           @id @default(autoincrement())
+  date            DateTime      @default(now())
+  sens            String // ENTREE, SORTIE
+  montant         Float
+  categorie       String
+  libelle         String
+  mode            String        @default("ESPECES") // ESPECES, CHEQUE, VIREMENT, MOBILE_MONEY
+  reference       String?
+  tiers           String?
+  bon_id          Int?
+  dossier_id      Int?
+  departement_id  Int? // centre de coût
+  banque          String? // banque du versement, du retrait, du chèque ou du virement
+  representant_id Int? // compte du représentant concerné (versement d'un client, paiement)
+  personne_id     Int? // compte de l'employé concerné (bon payé, reliquat, paiement)
+  user_id         Int
+  created_at      DateTime      @default(now())
+  representant    Representant? @relation("CaisseMouvementRepresentant", fields: [representant_id], references: [id], onDelete: SetNull)
+  personne        User?         @relation("CaisseMouvementPersonne", fields: [personne_id], references: [id], onDelete: SetNull)
+  bon             BonProvisoir? @relation(fields: [bon_id], references: [id], onDelete: SetNull)
+  dossier         Dossier?      @relation(fields: [dossier_id], references: [id], onDelete: SetNull)
+  user            User          @relation("CaisseMouvementUser", fields: [user_id], references: [id])
+  departement     Departement?  @relation(fields: [departement_id], references: [id], onDelete: SetNull)
+
+  @@index([date])
+}
+
+model CaisseCloture {
+  id              Int      @id @default(autoincrement())
+  date            DateTime
+  solde_theorique Float
+  solde_compte    Float
+  ecart           Float
+  observations    String?
+  user_id         Int
+  created_at      DateTime @default(now())
+  user            User     @relation("CaisseClotureUser", fields: [user_id], references: [id])
+}
+
+model DossierStageLog {
+  id         Int      @id @default(autoincrement())
+  dossier_id Int
+  from_stage String?
+  to_stage   String
+  user_id    Int?
+  created_at DateTime @default(now())
+  dossier    Dossier  @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+
+  @@index([dossier_id])
+}
+
+model PushSubscription {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  endpoint   String
+  p256dh     String
+  auth       String
+  user_agent String?
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+}
+
+model Tache {
+  id             Int            @id @default(autoincrement())
+  dossier_id     Int
+  titre          String
+  intervenant_id Int?
+  etat           String
+  observations   String?
+  deadline       DateTime?
+  created_at     DateTime       @default(now())
+  archive        Boolean        @default(false)
+  subtasks       SubTask[]
+  dossier        Dossier        @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+  intervenant    User?          @relation(fields: [intervenant_id], references: [id])
+  comments       TacheComment[]
+}
+
+model TacheComment {
+  id           Int      @id @default(autoincrement())
+  tache_id     Int
+  user_id      Int
+  contenu      String
+  is_next_step Boolean  @default(false)
+  created_at   DateTime @default(now())
+  user         User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  tache        Tache    @relation(fields: [tache_id], references: [id], onDelete: Cascade)
+}
+
+model SubTask {
+  id         Int      @id @default(autoincrement())
+  tache_id   Int
+  titre      String
+  fait       Boolean  @default(false)
+  created_at DateTime @default(now())
+  tache      Tache    @relation(fields: [tache_id], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id             Int           @id @default(autoincrement())
+  type           String
+  numero         String        @unique
+  client_id      Int
+  societe        String
+  total_ht       Float
+  total_ttc      Float
+  etat           String
+  created_at     DateTime      @default(now())
+  client         Client        @relation(fields: [client_id], references: [id], onDelete: Cascade)
+  dossier_id     Int?
+  departement_id Int? // centre de coût
+  dossier        Dossier?      @relation(fields: [dossier_id], references: [id], onDelete: SetNull)
+  departement    Departement?  @relation(fields: [departement_id], references: [id], onDelete: SetNull)
+  phase          String? // DROITS (facture 1) ou FINALE
+  lines          InvoiceLine[]
+  payments       Payment[]
+}
+
+model InvoiceLine {
+  id            Int      @id @default(autoincrement())
+  document_id   Int
+  description   String
+  quantite      Int
+  prix_unitaire Float
+  taxe_id       String
+  total         Float
+  document      Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+}
+
+model Stock {
+  id            Int     @id @default(autoincrement())
+  nom           String
+  quantite      Int
+  stock_min     Int
+  prix_vente    Float
+  lieu_stockage String?
+}
+
+model Payment {
+  id            Int      @id @default(autoincrement())
+  document_id   Int
+  montant       Float
+  moyen         String
+  date_paiement DateTime @default(now())
+  document      Document @relation(fields: [document_id], references: [id], onDelete: Cascade)
+}
+
+model ActivityLog {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  action     String
+  entity     String
+  entity_id  String?
+  meta       String?
+  created_at DateTime @default(now())
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model CompteComptable {
+  id          Int                 @id @default(autoincrement())
+  code        String              @unique
+  nom         String
+  type        String
+  sens_normal String
+  societe     String
+  actif       Boolean             @default(true)
+  ecritures   EcritureComptable[]
+}
+
+model EcritureComptable {
+  id         Int             @id @default(autoincrement())
+  journal    String
+  date       DateTime        @default(now())
+  piece_ref  String
+  compte_id  Int
+  libelle    String
+  debit      Float           @default(0)
+  credit     Float           @default(0)
+  societe    String
+  created_by Int
+  locked     Boolean         @default(false)
+  user       User            @relation(fields: [created_by], references: [id])
+  compte     CompteComptable @relation(fields: [compte_id], references: [id])
+}
+
+model PeriodeComptable {
+  id      Int     @id @default(autoincrement())
+  mois    Int
+  annee   Int
+  locked  Boolean @default(false)
+  societe String
+
+  @@unique([mois, annee, societe])
+}
+
+model TauxChange {
+  id     Int      @id @default(autoincrement())
+  devise String
+  taux   Float
+  date   DateTime @default(now())
+}
+
+model Fournisseur {
+  id        Int                  @id @default(autoincrement())
+  nom       String
+  niu       String?
+  rccm      String?
+  adresse   String?
+  tel       String?
+  email     String?
+  devise    String               @default("FCFA")
+  societe   String
+  actif     Boolean              @default(true)
+  commandes BonCommande[]
+  factures  FactureFournisseur[]
+}
+
+model BonCommande {
+  id             Int                  @id @default(autoincrement())
+  numero         String               @unique
+  fournisseur_id Int
+  date           DateTime             @default(now())
+  date_livraison DateTime?
+  etat           String               @default("Brouillon")
+  total_ht       Float                @default(0)
+  total_ttc      Float                @default(0)
+  notes          String?
+  societe        String
+  created_by     Int
+  fournisseur    Fournisseur          @relation(fields: [fournisseur_id], references: [id])
+  factures       FactureFournisseur[]
+  lignes         LigneBonCommande[]
+}
+
+model LigneBonCommande {
+  id            Int         @id @default(autoincrement())
+  commande_id   Int
+  description   String
+  quantite      Float
+  prix_unitaire Float
+  total         Float
+  commande      BonCommande @relation(fields: [commande_id], references: [id], onDelete: Cascade)
+}
+
+model FactureFournisseur {
+  id             Int                   @id @default(autoincrement())
+  numero         String
+  commande_id    Int?
+  departement_id Int? // centre de coût
+  fournisseur_id Int
+  date           DateTime              @default(now())
+  echeance       DateTime?
+  montant_ht     Float
+  montant_ttc    Float
+  etat           String                @default("En attente")
+  societe        String
+  commande       BonCommande?          @relation(fields: [commande_id], references: [id])
+  fournisseur    Fournisseur           @relation(fields: [fournisseur_id], references: [id])
+  departement    Departement?          @relation(fields: [departement_id], references: [id], onDelete: SetNull)
+  paiements      PaiementFournisseur[]
+}
+
+model PaiementFournisseur {
+  id         Int                @id @default(autoincrement())
+  facture_id Int
+  montant    Float
+  moyen      String
+  date       DateTime           @default(now())
+  facture    FactureFournisseur @relation(fields: [facture_id], references: [id], onDelete: Cascade)
+}
+
+model BonProvisoir {
+  id                Int               @id @default(autoincrement())
+  numero            String            @unique
+  dossier_id        Int?
+  departement_id    Int? // centre de coût
+  type              String            @default("DOSSIER") // DOSSIER ou INTERNE (dépense de la société)
+  categorie         String?
+  urgent            Boolean           @default(false) // choisi par l'émetteur : urgent passe en tête des visas et de la caisse
+  service           String
+  demandeur_id      Int
+  objet             String
+  montant_demande   Float
+  items_json        String?
+  etat              String            @default("EN_ATTENTE")
+  tick_pdg          Boolean           @default(false)
+  tick_dg           Boolean           @default(false)
+  tick_dga          Boolean           @default(false)
+  tick_daf          Boolean           @default(false)
+  tick_audit        Boolean           @default(false)
+  tick_pdg_by       String?
+  tick_dg_by        String?
+  tick_dga_by       String?
+  tick_daf_by       String?
+  tick_audit_by     String?
+  approved_by_id    Int?
+  approved_at       DateTime?
+  motif_rejet       String?
+  reminder_at       DateTime?
+  ordre_paiement_by String?
+  ordre_paiement_at DateTime?
+  paye_at           DateTime?
+  paye_par          String?
+  pieces_json       String? // pièces jointes d'un bon interne (devis, proforma)
+  rejet_type        String? // MODIFICATION (retour au demandeur) ou DEFINITIF
+  bon_parent_id     Int? // bon supplémentaire : complément d'un bon dont la dépense réelle a dépassé l'avance
+  origine           String? // DEBOURS : émis depuis Dépenses internes sur un dossier
+  recu_numero       String? // reçu de caisse imprimé au paiement (RC-AAAA-NNNN) ; unicité assurée par le code : un @unique sur une colonne ajoutée bloquerait le démarrage
+  recu_papier       String? // n° du reçu papier signé par le bénéficiaire, saisi par la caisse
+  recu_scan         String? // photo ou scan du reçu signé (facultatif)
+  recu_saisi_par    String?
+  recu_saisi_at     DateTime?
+  created_at        DateTime          @default(now())
+  approver          User?             @relation("BonApprover", fields: [approved_by_id], references: [id])
+  demandeur         User              @relation("BonDemandeur", fields: [demandeur_id], references: [id])
+  dossier           Dossier?          @relation(fields: [dossier_id], references: [id])
+  departement       Departement?      @relation(fields: [departement_id], references: [id], onDelete: SetNull)
+  bon_reel          BonReel?
+  mouvements        CaisseMouvement[]
+
+  @@index([recu_numero])
+}
+
+model BonReel {
+  id                Int          @id @default(autoincrement())
+  bon_provisoir_id  Int          @unique
+  dossier_id        Int?
+  montant_provisoir Float
+  montant_reel      Float
+  ecart             Float
+  observations      String?
+  items_json        String?
+  pieces_json       String?
+  soumis_par_id     Int
+  confirme_par_id   Int?
+  confirme_at       DateTime?
+  created_at        DateTime     @default(now())
+  confirme_par      User?        @relation("BonReelConfirme", fields: [confirme_par_id], references: [id])
+  soumis_par        User         @relation("BonReelSoumis", fields: [soumis_par_id], references: [id])
+  dossier           Dossier?     @relation(fields: [dossier_id], references: [id])
+  bon_provisoir     BonProvisoir @relation(fields: [bon_provisoir_id], references: [id])
+}
+
+model DossierFile {
+  id         Int      @id @default(autoincrement())
+  dossier_id Int
+  user_id    Int
+  filename   String
+  original   String
+  stage      String
+  category   String
+  comment    String?
+  path       String
+  created_at DateTime @default(now())
+  dossier    Dossier  @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model DossierComment {
+  id               Int        @id @default(autoincrement())
+  dossier_id       Int
+  user_id          Int
+  contenu          String
+  stage            String
+  created_at       DateTime   @default(now())
+  // Discussion façon WhatsApp : pièces jointes (photos, vidéos, documents), mentions, réponse, suppression
+  attachments_json String?
+  mentions_json    String?
+  reply_to_id      Int?
+  deleted_at       DateTime?
+  dossier          Dossier    @relation(fields: [dossier_id], references: [id], onDelete: Cascade)
+  user             User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  seen             ChatSeen[]
+}
+
+// Accusés de lecture : qui a vu quel message, et quand
+model ChatSeen {
+  id         Int            @id @default(autoincrement())
+  comment_id Int
+  user_id    Int
+  dossier_id Int
+  seen_at    DateTime       @default(now())
+  comment    DossierComment @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+
+  @@unique([comment_id, user_id])
+  @@index([dossier_id, user_id])
+}
+
+model Notification {
+  id            Int      @id @default(autoincrement())
+  user_id       Int
+  titre         String
+  contenu       String
+  lien          String?
+  lu            Boolean  @default(false)
+  browser_shown Boolean  @default(false)
+  created_at    DateTime @default(now())
+  user          User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model ClientDocument {
+  id              Int           @id @default(autoincrement())
+  client_id       Int
+  user_id         Int
+  filename        String
+  original        String
+  category        String
+  comment         String?
+  path            String
+  created_at      DateTime      @default(now())
+  client          Client        @relation("ClientDocuments", fields: [client_id], references: [id], onDelete: Cascade)
+  user            User          @relation("UserClientDocuments", fields: [user_id], references: [id], onDelete: Cascade)
+  representant_id Int?
+  representant    Representant? @relation("RepresentantDocuments", fields: [representant_id], references: [id])
+}
+
+model Representant {
+  id                   Int                  @id @default(autoincrement())
+  nom                  String
+  prenom               String?
+  tel                  String?
+  email                String?
+  cni_numero           String?
+  fonction             String?
+  actif                Boolean              @default(true)
+  created_at           DateTime             @default(now())
+  client_representants ClientRepresentant[] @relation("RepClients")
+  dossiers             Dossier[]            @relation("DossierRepresentant")
+  documents            ClientDocument[]     @relation("RepresentantDocuments")
+  compte_caisse        CaisseMouvement[]    @relation("CaisseMouvementRepresentant")
+}
+
+model ClientRepresentant {
+  id              Int          @id @default(autoincrement())
+  client_id       Int
+  representant_id Int
+  est_principal   Boolean      @default(false)
+  created_at      DateTime     @default(now())
+  client          Client       @relation("ClientReps", fields: [client_id], references: [id], onDelete: Cascade)
+  representant    Representant @relation("RepClients", fields: [representant_id], references: [id], onDelete: Cascade)
+
+  @@unique([client_id, representant_id])
+}
+
+// Services de l'entreprise. Chaque employé appartient à un service, et chaque mouvement d'argent
+// (bon, caisse, facture, facture fournisseur) porte un service : c'est le centre de coût
+// qui permet le résultat par activité (transit, transport…).
+model Departement {
+  id                   Int                  @id @default(autoincrement())
+  code                 String               @unique
+  nom                  String
+  couleur              String               @default("#2563eb")
+  icone                String               @default("bi-diagram-3")
+  description          String?
+  responsable_id       Int?
+  actif                Boolean              @default(true)
+  ordre                Int                  @default(0)
+  created_at           DateTime             @default(now())
+  responsable          User?                @relation("DepartementResponsable", fields: [responsable_id], references: [id], onDelete: SetNull)
+  membres              User[]               @relation("DepartementMembres")
+  caisse_mouvements    CaisseMouvement[]
+  bons                 BonProvisoir[]
+  documents            Document[]
+  factures_fournisseur FactureFournisseur[]
+  demandes             Demande[]
+  employes             Employe[]            @relation("EmployeDepartement")
+}
+
+// Circuit d'approbation commun : congés, achats, réparations, autres demandes
+model Demande {
+  id             Int            @id @default(autoincrement())
+  numero         String         @unique
+  type           String // CONGE, ACHAT, REPARATION, AUTRE
+  titre          String
+  details        String?
+  donnees_json   String? // champs propres au type (dates de congé, fournisseur, véhicule…)
+  montant        Float?
+  pieces_json    String?
+  etat           String         @default("EN_ATTENTE") // EN_ATTENTE, APPROUVEE, REFUSEE, ANNULEE
+  etape_courante Int            @default(0)
+  demandeur_id   Int
+  departement_id Int?
+  created_at     DateTime       @default(now())
+  decided_at     DateTime?
+  demandeur      User           @relation("DemandeDemandeur", fields: [demandeur_id], references: [id], onDelete: Cascade)
+  departement    Departement?   @relation(fields: [departement_id], references: [id], onDelete: SetNull)
+  etapes         DemandeEtape[]
+
+  @@index([etat])
+  @@index([demandeur_id])
+}
+
+model DemandeEtape {
+  id          Int       @id @default(autoincrement())
+  demande_id  Int
+  ordre       Int
+  approbateur String // RESPONSABLE (responsable du service) ou un rôle : rh, daf, dg, pdg…
+  decision    String? // APPROUVE, REFUSE
+  commentaire String?
+  decideur_id Int?
+  decided_at  DateTime?
+  demande     Demande   @relation(fields: [demande_id], references: [id], onDelete: Cascade)
+  decideur    User?     @relation("DemandeEtapeDecideur", fields: [decideur_id], references: [id], onDelete: SetNull)
+
+  @@unique([demande_id, ordre])
+}
+
+// Règles du circuit : pour un type et à partir d'un montant, la liste des approbateurs dans l'ordre
+model CircuitRegle {
+  id          Int     @id @default(autoincrement())
+  type        String
+  montant_min Float   @default(0)
+  etapes_json String // ["RESPONSABLE","daf","dg"]
+  actif       Boolean @default(true)
+
+  @@unique([type, montant_min])
+}
+
+// Discussion attachée à n'importe quelle fiche (demande, bon, client…) : messages, pièces jointes, mentions
+model FilMessage {
+  id               Int       @id @default(autoincrement())
+  cible            String // demande, bon, client
+  cible_id         Int
+  user_id          Int
+  texte            String
+  attachments_json String?
+  mentions_json    String?
+  deleted_at       DateTime?
+  created_at       DateTime  @default(now())
+  user             User      @relation("FilMessageUser", fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([cible, cible_id])
+}
+
+// Réglages simples de l'application (clé → valeur JSON), modifiables dans l'administration
+model Parametre {
+  cle        String   @id
+  valeur     String
+  updated_at DateTime @updatedAt
+}
+
+// =====================================================================
+// Ressources humaines et paie
+// =====================================================================
+model Employe {
+  id               Int            @id @default(autoincrement())
+  matricule        String         @unique
+  user_id          Int?           @unique // compte de connexion
+  nom              String
+  prenom           String?
+  sexe             String? // M, F
+  date_naissance   DateTime?
+  telephone        String?
+  email            String?
+  adresse          String?
+  situation        String? // CELIBATAIRE, MARIE, DIVORCE, VEUF
+  enfants          Int            @default(0)
+  poste            String?
+  departement_id   Int?
+  type_contrat     String         @default("CDI") // CDI, CDD, STAGE, ESSAI, PRESTATAIRE
+  date_embauche    DateTime?
+  date_fin_contrat DateTime?
+  categorie        String? // catégorie / échelon de la convention collective
+  salaire_base     Float          @default(0)
+  primes_json      String? // primes fixes : [{ libelle, montant, imposable }]
+  mode_paiement    String         @default("VIREMENT") // VIREMENT, ESPECES, MOBILE_MONEY
+  banque           String?
+  rib              String?
+  cnps_numero      String?
+  niu              String? // numéro d'identifiant unique (impôts)
+  conges_report    Float          @default(0) // jours de congé reportés à l'ouverture du dossier
+  pieces_json      String?
+  actif            Boolean        @default(true)
+  date_sortie      DateTime?
+  motif_sortie     String?
+  created_at       DateTime       @default(now())
+  user             User?          @relation("EmployeCompte", fields: [user_id], references: [id], onDelete: SetNull)
+  departement      Departement?   @relation("EmployeDepartement", fields: [departement_id], references: [id], onDelete: SetNull)
+  bulletins        BulletinPaie[]
+}
+
+model PeriodePaie {
+  id         Int            @id @default(autoincrement())
+  annee      Int
+  mois       Int
+  statut     String         @default("BROUILLON") // BROUILLON, VALIDEE, PAYEE
+  valide_par Int?
+  valide_at  DateTime?
+  paye_at    DateTime?
+  mode       String? // VIREMENT, ESPECES
+  created_at DateTime       @default(now())
+  bulletins  BulletinPaie[]
+
+  @@unique([annee, mois])
+}
+
+model BulletinPaie {
+  id             Int         @id @default(autoincrement())
+  periode_id     Int
+  employe_id     Int
+  departement_id Int?
+  salaire_base   Float
+  jours_absence  Float       @default(0)
+  primes_json    String? // primes du mois (fixes + variables)
+  avance         Float       @default(0)
+  detail_json    String // calcul complet : brut, cotisations, impôts, net, charges patronales
+  brut           Float       @default(0)
+  net            Float       @default(0)
+  cout_total     Float       @default(0) // brut + charges patronales
+  created_at     DateTime    @default(now())
+  periode        PeriodePaie @relation(fields: [periode_id], references: [id], onDelete: Cascade)
+  employe        Employe     @relation(fields: [employe_id], references: [id], onDelete: Cascade)
+
+  @@unique([periode_id, employe_id])
+}
+
+// Dictionnaire des codes tarifaires (nomenclature douanière), enrichi à chaque validation
+model CodeTarifaire {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  designation String
+  notes       String?
+  usages      Int      @default(0)
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+}
+
+// Banques avec lesquelles la société travaille (paiement des droits, sorties de caisse vers la banque)
+model Banque {
+  id            Int      @id @default(autoincrement())
+  nom           String   @unique
+  numero_compte String?
+  agence        String?
+  actif         Boolean  @default(true)
+  ordre         Int      @default(0)
+  created_at    DateTime @default(now())
+}
+
+// Demande de dépôt ou de retrait sur un compte (représentant ou employé) : la caisse confirme avant tout mouvement
+model DemandeCompte {
+  id              Int       @id @default(autoincrement())
+  representant_id Int?
+  personne_id     Int?
+  sens            String // ENTREE (dépôt) ou SORTIE (retrait, paiement)
+  montant         Float
+  mode            String    @default("ESPECES")
+  banque          String?
+  motif           String?
+  reference       String?
+  etat            String    @default("EN_ATTENTE") // EN_ATTENTE, CONFIRMEE, REFUSEE
+  demandeur_id    Int
+  traite_par_id   Int?
+  traite_at       DateTime?
+  motif_refus     String?
+  mouvement_id    Int?
+  created_at      DateTime  @default(now())
+
+  @@index([etat])
+}

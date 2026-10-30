@@ -1,0 +1,41 @@
+<%- include('_head') %>
+  <title>Suivi du dossier <%= d.numero %> · YM-TRANSIT</title>
+</head>
+<body class="suivi-body">
+  <main class="suivi">
+    <header class="suivi-brand"><span class="brand-mark">YM</span><div><b>YM-TRANSIT</b><small>Transit & douane · Douala · Kribi</small></div></header>
+
+    <section class="suivi-card">
+      <div class="small text-muted">Dossier</div>
+      <h1><%= d.numero %></h1>
+      <div class="suivi-meta">
+        <span><i class="bi bi-building"></i><%= d.client ? d.client.nom : '' %></span>
+        <span><i class="bi bi-truck"></i><%= d.nature %></span>
+        <span><i class="bi bi-geo-alt"></i><%= d.port %></span>
+        <% if (d.bl) { %><span><i class="bi bi-file-earmark-text"></i>BL <%= d.bl %></span><% } %>
+      </div>
+      <div class="suivi-now">
+        <span class="sn-dot"></span>
+        <div><small>Étape actuelle</small><b><%= clientSteps[cur].label %></b></div>
+      </div>
+      <% if (d.bae_numero) { %>
+        <div class="suivi-ok"><i class="bi bi-unlock-fill"></i>Marchandise libérée par la douane (BAE n° <%= d.bae_numero %>)</div>
+      <% } %>
+    </section>
+
+    <section class="suivi-card">
+      <h2>Avancement</h2>
+      <ol class="suivi-steps">
+        <% clientSteps.forEach((s, i) => { const at = reached(s.keys); const state = i < cur ? 'done' : i === cur ? 'now' : 'todo'; %>
+          <li class="<%= state %> step-c-<%= [1,2,3,4,5,7,8,9][i] %>">
+            <span class="ss-dot"><% if (state === 'done') { %><i class="bi bi-check-lg"></i><% } %></span>
+            <div><b><%= s.label %></b><% if (at && state !== 'todo') { %><small><%= new Date(at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) %></small><% } %></div>
+          </li>
+        <% }) %>
+      </ol>
+    </section>
+
+    <p class="suivi-foot">Cette page se met à jour automatiquement à chaque étape. Pour toute question, contactez votre chargé de dossier YM-TRANSIT.</p>
+  </main>
+</body>
+</html>

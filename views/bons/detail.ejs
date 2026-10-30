@@ -1,0 +1,142 @@
+<%- include('../partials/header') %>
+<%
+  const interne = bon.type === 'INTERNE' || !bon.dossier;
+  const fmt = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  let provItems = []; try { provItems = bon.items_json ? JSON.parse(bon.items_json) : []; } catch (e) {}
+  if (!provItems.length) provItems = [{ designation: bon.objet, montant: bon.montant_demande }];
+  let reelItems = []; if (bon.bon_reel) { try { reelItems = JSON.parse(bon.bon_reel.items_json || '[]'); } catch (e) {} }
+  let pieces = []; try { pieces = JSON.parse(bon.pieces_json || '[]'); } catch (e) {}
+  let piecesReel = []; if (bon.bon_reel) { try { piecesReel = JSON.parse(bon.bon_reel.pieces_json || '[]'); } catch (e) {} }
+  const etatBadge = { EN_ATTENTE: ['Visas en cours', 'warning'], APPROUVE: ['Payé par la caisse', 'success'], REJETE: ['Rejeté définitivement', 'danger'], A_MODIFIER: ['À modifier par le demandeur', 'warning'] }[bon.etat] || [bon.etat, 'secondary'];
+  const VISA_BY_ROLE = { pdg: 'pdg', dg: 'dg', dga: 'dga', daf: 'daf', auditeur1: 'audit', auditeur2: 'audit' };
+  const myKey = VISA_BY_ROLE[user.role] || (user.role === 'super_admin' ? '*' : null);
+  const canReject = ["super_admin", "pdg", "dg", "dga", "daf", "auditeur1", "auditeur2"].includes(user.role);
+  const canEdit = bon.etat === 'A_MODIFIER' && (bon.demandeur_id === user.id || user.role === 'super_admin');
+  const canJustify = bon.etat === 'APPROUVE' && !bon.bon_reel && (bon.demandeur_id === user.id || user.role === 'super_admin' || (!interne && ['acconage','enlevement'].includes(user.role)));
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-receipt"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1 class="text-truncate">Bon <%= bon.numero %></h1>
+    <p class="mb-0"><%= bonTitle(bon) %><%= !interne && bon.dossier.client ? ' · ' + bon.dossier.client.nom : '' %> · <span class="badge text-bg-<%= etatBadge[1] %>"><%= etatBadge[0] %></span><% if (bon.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %></p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap">
+    <% if (!interne) { %><a href="/dossiers/<%= bon.dossier.id %>" class="btn btn-light"><i class="bi bi-folder2-open me-1"></i>Dossier</a><% } else { %><a href="/depenses" class="btn btn-light"><i class="bi bi-arrow-left me-1"></i>Dépenses</a><% } %>
+    <a href="/bons/<%= bon.id %>/pdf" target="_blank" class="btn btn-light"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</a>
+  </div>
+</div>
+
+<% if (bon.etat === 'EN_ATTENTE') { %>
+  <div class="visa-list mb-4"><%- include('_card', { b: bon, myKey, isCaisse, canOrder, canReject, holders }) %></div>
+<% } %>
+
+<% if (bon.etat === 'A_MODIFIER') { %>
+  <div class="card mb-4 border-warning" id="modifier">
+    <div class="card-header bg-warning-subtle"><i class="bi bi-pencil-square me-1"></i>Rejeté pour modification<span class="d-block small fw-normal">Motif : <%= bon.motif_rejet %></span></div>
+    <% if (canEdit) { %>
+      <form class="card-body" method="POST" action="/bons/<%= bon.id %>/modifier">
+        <label class="form-label">Objet</label>
+        <input name="objet" class="form-control mb-3" value="<%= bon.objet %>">
+        <div id="modLines">
+          <% provItems.forEach(it => { %>
+            <div class="row g-2 mb-2 mod-line"><div class="col-7"><input name="designation" class="form-control" value="<%= it.designation %>" placeholder="Désignation"></div><div class="col-4"><input name="montant" class="form-control" inputmode="decimal" data-money value="<%= Math.round(it.montant || 0) %>" placeholder="Montant"></div><div class="col-1"><button type="button" class="btn btn-light w-100" onclick="this.closest('.mod-line').remove()" aria-label="Retirer">×</button></div></div>
+          <% }) %>
+        </div>
+        <button type="button" class="btn btn-sm btn-light mb-3" onclick="var l=document.querySelector('#modLines .mod-line').cloneNode(true); l.querySelectorAll('input').forEach(function(i){i.value=''}); document.getElementById('modLines').appendChild(l)"><i class="bi bi-plus-lg me-1"></i>Ajouter une ligne</button>
+        <div class="d-flex justify-content-end"><button class="btn btn-primary"><i class="bi bi-send me-1"></i>Corriger et renvoyer aux visas</button></div>
+      </form>
+    <% } else { %>
+      <div class="card-body small text-muted">En attente de la correction par le demandeur. Les visas repartiront de zéro.</div>
+    <% } %>
+  </div>
+<% } %>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-wallet2 me-2" style="color:var(--step-6)"></i>Bon provisoire · demande d'avance</div>
+      <div class="card-body">
+        <dl class="kv mb-3">
+          <div><dt>Demandeur</dt><dd><%= [bon.demandeur.prenom, bon.demandeur.nom].filter(Boolean).join(' ') %> <span class="text-muted small">(<%= bon.service %>)</span></dd></div>
+          <% if (interne) { %><div><dt>Catégorie</dt><dd><%= categorieLabel(bon.categorie) %></dd></div><% } %>
+          <div><dt>Objet</dt><dd><%= bon.objet %></dd></div>
+          <div><dt>Créé le</dt><dd><%= new Date(bon.created_at).toLocaleString('fr-FR') %></dd></div>
+          <% if (bon.ordre_paiement_by) { %><div><dt>Ordre de paiement</dt><dd><%= bon.ordre_paiement_by %> · <%= new Date(bon.ordre_paiement_at).toLocaleString('fr-FR') %></dd></div><% } %>
+          <% if (bon.paye_at) { %><div><dt>Payé</dt><dd><i class="bi bi-cash-coin text-success me-1"></i><%= bon.paye_par %> · <%= new Date(bon.paye_at).toLocaleString('fr-FR') %></dd></div><% } %>
+          <% if (bon.etat === 'APPROUVE') { %><div><dt>Reçu de caisse</dt><dd><a href="/bons/<%= bon.id %>/recu"><i class="bi bi-receipt me-1"></i><%= bon.recu_numero || 'Imprimer le reçu' %></a> · <% if (bon.recu_papier || bon.recu_scan) { %><span class="text-success"><i class="bi bi-check2-circle"></i> reçu signé<%= bon.recu_papier ? ' N° ' + bon.recu_papier : '' %></span><% } else { %><span class="text-warning-emphasis">reçu signé à saisir</span><% } %></dd></div><% } %>
+        </dl>
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Désignation</th><th class="text-end">Montant</th></tr></thead>
+          <tbody>
+            <% provItems.forEach(it => { %><tr><td><%= it.designation %></td><td class="text-end"><%= fmt(it.montant) %> F</td></tr><% }) %>
+          </tbody>
+          <tfoot><tr class="fw-bold"><td>Total demandé</td><td class="text-end"><%= fmt(bon.montant_demande) %> F</td></tr></tfoot>
+        </table>
+        <% if (pieces.length) { %>
+          <div class="mt-3 small"><% pieces.forEach(p => { %><a class="me-3" href="/bons/<%= bon.id %>/piece/<%= p.filename %>" target="_blank"><i class="bi bi-paperclip"></i> <%= p.original %></a><% }) %></div>
+        <% } %>
+        <% if (bon.bon_parent_id) { %><div class="alert alert-info mt-3 mb-0 small"><i class="bi bi-link-45deg me-1"></i>Bon supplémentaire : complément du <a href="/bons/<%= bon.bon_parent_id %>">bon d'origine</a>, dont la dépense réelle a dépassé l'avance. Il suit les visas, puis la caisse le paie ; rien à justifier ensuite.</div><% } %>
+        <% if (typeof supplement !== 'undefined' && supplement) { %><div class="alert alert-warning mt-3 mb-0 small"><i class="bi bi-plus-circle me-1"></i>Bon supplémentaire <a href="/bons/<%= supplement.id %>"><%= supplement.numero %></a> de <%= fmt(supplement.montant_demande) %> F pour le complément.</div><% } %>
+        <% if (bon.motif_rejet) { %><div class="alert alert-danger mt-3 mb-0"><b>Motif du rejet :</b> <%= bon.motif_rejet %></div><% } %>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-shield-check me-2" style="color:var(--step-7)"></i>Bon réel · dépense justifiée</div>
+      <div class="card-body">
+        <% if (!bon.bon_reel) { %>
+          <div class="empty-state py-4"><div class="es-ico"><i class="bi bi-hourglass-bottom"></i></div>
+            <b><%= bon.etat === 'APPROUVE' ? 'En attente des justificatifs' : 'Pas encore payé' %></b>
+            <div class="small">Après le paiement, le demandeur saisit les montants réels en face de chaque ligne prévue.</div>
+            <% if (canJustify) { %>
+              <a class="btn btn-primary mt-3" href="/depenses/<%= bon.id %>/justifier"><i class="bi bi-pencil-square me-1"></i>Saisir le bon réel</a>
+            <% } %>
+          </div>
+        <% } else { const br = bon.bon_reel; %>
+          <%- include('_compare', { items: reelItems, prov: br.montant_provisoir, reel: br.montant_reel, pieceBase: '/bons/' + bon.id + '/piece/' }) %>
+          <dl class="kv mt-3 mb-0">
+            <div><dt>Justifié par</dt><dd><%= br.soumis_par ? [br.soumis_par.prenom, br.soumis_par.nom].filter(Boolean).join(' ') : '—' %> · <%= new Date(br.created_at).toLocaleString('fr-FR') %></dd></div>
+            <% if (br.observations) { %><div><dt>Observations</dt><dd><%= br.observations %></dd></div><% } %>
+            <% if (piecesReel.length) { %><div><dt>Reçus</dt><dd><% piecesReel.forEach(p => { %><a class="me-2 d-inline-block" href="/bons/<%= bon.id %>/piece/<%= p.filename %>" target="_blank"><i class="bi bi-paperclip"></i> <%= p.original %><% if (p.ligne) { %> <span class="text-muted small">(<%= p.ligne %>)</span><% } %></a><% }) %></dd></div><% } %>
+          </dl>
+          <div class="border rounded-3 p-3 mt-3">
+            <% if (br.confirme_at) { %>
+              <div class="text-success fw-semibold small"><i class="bi bi-patch-check-fill me-1"></i>Régularisation confirmée par la caisse (<%= br.confirme_par ? br.confirme_par.nom : '' %>) le <%= new Date(br.confirme_at).toLocaleString('fr-FR') %></div>
+            <% } else { %>
+              <% const rendu = (bon.mouvements || []).filter(m => m.categorie === 'RETOUR_BON').reduce((t, m) => t + m.montant, 0); const du = Math.round(br.ecart - rendu); %>
+              <div class="small fw-semibold mb-2 <%= du > 0 ? 'text-success' : du < 0 ? 'text-danger' : '' %>">
+                <% if (du > 0) { %><i class="bi bi-arrow-down-left-circle me-1"></i><%= fmt(du) %> F à rendre à la caisse
+                <% } else if (du < 0) { %><i class="bi bi-arrow-up-right-circle me-1"></i><%= fmt(-du) %> F de complément : un bon supplémentaire suivra les visas
+                <% } else { %><i class="bi bi-check2 me-1"></i>Aucun écart<% } %>
+                <% if (rendu > 0) { %><span class="d-block text-muted fw-normal"><%= fmt(rendu) %> F déjà rendus avant la justification.</span><% } %>
+              </div>
+              <% if (isCaisse) { %>
+                <button onclick="confirmDecaissement(<%= br.id %>)" class="btn btn-primary w-100"><i class="bi bi-check-circle me-1"></i><%= du > 0 ? 'Reliquat reçu, confirmer' : du < 0 ? 'Créer le bon supplémentaire' : 'Confirmer la régularisation' %></button>
+              <% } else { %>
+                <div class="small text-muted">En attente de confirmation par la caisse.</div>
+              <% } %>
+            <% } %>
+          </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mt-4 fil-wrap"><%- include('../partials/_fil', { cible: 'bon', cibleId: bon.id, titre: 'Discussion du bon' }) %></div>
+
+<%- include('_actions') %>
+<script>
+  async function confirmDecaissement(bonReelId) {
+    if (!confirm("Confirmer la régularisation ? Le mouvement sera inscrit dans la caisse.")) return;
+    try {
+      const res = await fetch(`/bons/reel/${bonReelId}/confirmer`, { method: "PATCH", headers: { "Content-Type": "application/json" } });
+      const data = await res.json();
+      if (data.ok) { showToast("C'est fait", data.message, null, 'ok'); setTimeout(() => location.reload(), 500); }
+      else showToast('Action impossible', data.message, null, 'err');
+    } catch (e) { showToast('Erreur réseau', 'Réessayez.', null, 'err'); }
+  }
+</script>
+<%- include('../partials/footer') %>

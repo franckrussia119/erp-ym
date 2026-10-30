@@ -1,0 +1,9 @@
+<%# Décor animé des grands bandeaux : halos verts qui flottent, reflet qui balaie, petites pastilles en lévitation.
+    Purement décoratif (aria-hidden), coupé si l'appareil demande moins d'animations. %>
+<% const fxIcons = typeof icons !== 'undefined' ? icons : ['bi-graph-up-arrow', 'bi-receipt', 'bi-box-seam', 'bi-cash-coin']; %>
+<div class="hero-fx" aria-hidden="true">
+  <span class="orb o1"></span><span class="orb o2"></span><span class="orb o3"></span>
+  <span class="sweep"></span>
+  <span class="fx-dots"></span>
+  <% fxIcons.forEach(function (ic, i) { %><span class="fc fc<%= i + 1 %>"><i class="bi <%= ic %>"></i></span><% }) %>
+</div>

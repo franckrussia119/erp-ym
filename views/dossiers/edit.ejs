@@ -1,0 +1,560 @@
+<%- include('../partials/header') %>
+
+<div class="row mb-4 align-items-center" id="edit-dossier-header">
+  <div class="col-sm-6 text-start">
+    <h1 class="h3 mb-1 text-slate-800 font-sans fw-bold">
+      <i class="bi bi-pencil-square text-primary me-2"></i>Modifier le Dossier : <%= dossier.numero %>
+    </h1>
+    <p class="text-muted mb-0 font-monospace" style="font-size: 0.85rem;">Identifiant Interne : #<%= dossier.id %> | Étape actuelle : <%= dossier.pipeline_status %></p>
+  </div>
+  <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+    <a href="/dossiers" class="btn btn-outline-secondary btn-sm rounded-pill px-3">
+      <i class="bi bi-arrow-left me-1"></i> Annuler & Retour
+    </a>
+  </div>
+</div>
+
+<% 
+  const filesByCat = {};
+  if (dossier.files) {
+    dossier.files.forEach(f => { 
+      let ref = "";
+      if (f.comment && f.comment.startsWith("Réf: ")) {
+        ref = f.comment.replace("Réf: ", "");
+      }
+      filesByCat[f.category] = { file: f, ref: ref }; 
+    });
+  }
+%>
+
+<form action="/dossiers/<%= dossier.id %>/edit" method="POST" enctype="multipart/form-data" class="needs-validation" novalidate id="dossier-edit-form">
+  <div class="row g-4">
+    <!-- Left Column: Section A & Section B -->
+    <div class="col-lg-8">
+      
+      <!-- SECTION A — INFO/CLIENT -->
+      <div class="card border-0 shadow-sm mb-4 text-start" id="edit-section-a">
+        <div class="card-header bg-slate-900 text-white py-3">
+          <h5 class="card-title mb-0 text-white fw-bold"><i class="bi bi-person-badge-fill me-2"></i>SECTION A — INFO/CLIENT</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Client Associé <span class="text-danger">*</span></label>
+              <select class="form-select" id="clientSelect" name="client_id" required>
+                <% clients.forEach(cl => { %>
+                  <option value="<%= cl.id %>" <%= cl.id === dossier.client_id ? 'selected' : '' %>><%= cl.nom %></option>
+                <% }) %>
+              </select>
+              <div class="invalid-feedback">Veuillez sélectionner un client.</div>
+            </div>
+
+            <!-- Pre-verification documents badges -->
+            <div class="col-md-12" id="document-status-row">
+              <div class="p-3 bg-light border rounded d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div>
+                  <span class="small fw-semibold text-muted d-block uppercase mb-1">Vérification de Conformité Administrative Client :</span>
+                  <span id="badge-cni" class="badge bg-secondary-subtle text-secondary me-2 p-2 fs-7">
+                    <i class="bi bi-shield-fill-check"></i> CNI non vérifiée
+                  </span>
+                  <span id="badge-procu" class="badge bg-secondary-subtle text-secondary p-2 fs-7">
+                    <i class="bi bi-shield-fill-check"></i> Procuration non vérifiée
+                  </span>
+                </div>
+                <div id="full-client-link-container">
+                  <a href="/clients/<%= dossier.client_id %>" target="_blank" class="btn btn-outline-primary btn-xs d-inline-flex align-items-center">
+                    <i class="bi bi-person-fill me-1"></i> Fiche client complète <i class="bi bi-box-arrow-up-right ms-1"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Représentant Mandataire</label>
+              <div class="input-group mb-2">
+                <span class="input-group-text bg-white"><i class="bi bi-person-badge text-primary"></i></span>
+                <select class="form-select border-start-0" id="representant_id" name="representant_id">
+                  <option value="">-- Sélectionnez un représentant --</option>
+                </select>
+              </div>
+              <div id="add-rep-link-container" class="mb-2" style="display: none;">
+                <a href="#" id="add-rep-link" class="small fw-semibold text-decoration-none" target="_blank">
+                  <i class="bi bi-plus-circle-fill me-1 text-primary"></i> Ajouter un nouveau représentant pour ce client
+                </a>
+              </div>
+              <!-- Free-text input fallback -->
+              <label class="form-label small fw-bold" style="font-size: 0.8rem;">Ou saisir un nom libre</label>
+              <div class="input-group">
+                <span class="input-group-text bg-white"><i class="bi bi-pencil-square"></i></span>
+                <input type="text" class="form-control border-start-0" name="representant" id="representantInput" value="<%= dossier.representant_libre || dossier.representant || '' %>" placeholder="Saisir le nom du mandataire">
+              </div>
+            </div>
+
+            <!-- Selected representant details panel -->
+            <div class="col-12 mt-2" id="selected-rep-details" style="display: none;">
+              <div class="p-3 bg-light rounded border text-start" style="border: 1px dashed #0d6efd !important;">
+                <h6 class="fw-bold mb-2 font-sans text-primary" style="font-size: 0.85rem;">
+                  <i class="bi bi-person-check-fill"></i> Détails du Représentant Sélectionné
+                </h6>
+                <div class="row g-2">
+                  <div class="col-sm-4">
+                    <div class="small text-muted" style="font-size: 0.75rem;">CNI N° :</div>
+                    <div class="fw-bold text-slate-800" id="rep-cni-num">-</div>
+                  </div>
+                  <div class="col-sm-4">
+                    <div class="small text-muted" style="font-size: 0.75rem;">Téléphone :</div>
+                    <div class="fw-bold text-slate-800" id="rep-tel">-</div>
+                  </div>
+                  <div class="col-sm-4">
+                    <div class="small text-muted" style="font-size: 0.75rem;">Statut Pièces :</div>
+                    <div class="d-flex gap-1" id="rep-docs-status">
+                      -
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Numéro de dossier unique <span class="text-danger">*</span></label>
+              <input type="text" class="form-control font-monospace" name="numero" value="<%= dossier.numero %>" required id="numeroDossierInput">
+              <div class="invalid-feedback">Le numéro de dossier est requis.</div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Statut Dossier <span class="text-danger">*</span></label>
+              <select class="form-select" name="etat" required id="etatDossierSelect">
+                <option value="OUVERT" <%= dossier.etat === 'OUVERT' ? 'selected' : '' %>>OUVERT / ATTENTE DOCS</option>
+                <option value="EN_COURS" <%= dossier.etat === 'EN_COURS' ? 'selected' : '' %>>EN COURS DE TRAITEMENT</option>
+                <option value="EN_ATTENTE" <%= dossier.etat === 'EN_ATTENTE' ? 'selected' : '' %>>EN ATTENTE DE DECISION</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECTION B — INFO/DOUANE -->
+      <div class="card border-0 shadow-sm text-start" id="edit-section-b">
+        <div class="card-header bg-slate-800 text-white py-3">
+          <h5 class="card-title mb-0 text-white fw-bold"><i class="bi bi-shield-fill-check me-2"></i>SECTION B — INFO/DOUANE</h5>
+        </div>
+        <div class="card-body">
+          <div class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Régime / Nature de l'opération <span class="text-danger">*</span></label>
+              <select class="form-select" name="nature" id="natureSelect" required>
+                <option value="IMPORT" <%= dossier.nature === 'IMPORT' ? 'selected' : '' %>>IMPORTATION (Mise en consommation)</option>
+                <option value="EXPORT" <%= dossier.nature === 'EXPORT' ? 'selected' : '' %>>EXPORTATION (Envoi international)</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Port ou Douane Cible <span class="text-danger">*</span></label>
+              <select class="form-select" name="port" required id="portSelect">
+                <option value="Port Autonome de Douala (PAD)" <%= dossier.port === 'Port Autonome de Douala (PAD)' ? 'selected' : '' %>>Port de Douala (PAD)</option>
+                <option value="Port de Kribi (Seaport)" <%= dossier.port === 'Port de Kribi (Seaport)' ? 'selected' : '' %>>Port de Kribi (Seaport)</option>
+                <option value="Aéroport International Douala" <%= dossier.port === 'Aéroport International Douala' ? 'selected' : '' %>>Aéroport International Douala</option>
+                <option value="Aéroport International Yaoundé-Nsimalen" <%= dossier.port === 'Aéroport International Yaoundé-Nsimalen' ? 'selected' : '' %>>Aéroport Nsimalen (YDE)</option>
+              </select>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Valeur CAF (FCFA)</label>
+              <input type="number" class="form-control" name="valeur_douane" value="<%= dossier.valeur_douane || '' %>" placeholder="Saisir montant en FCFA" id="valeurDouaneInput">
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Montant des droits de douane estimés (FCFA)</label>
+              <input type="number" class="form-control" name="droits_douane" value="<%= dossier.droits_douane || '' %>" placeholder="Saisir montant en FCFA" id="droitsDouaneInput">
+            </div>
+
+            <div class="col-md-12">
+              <label class="form-label small fw-bold">Contenu du conteneur / Description Marchandises</label>
+              <textarea class="form-control" name="contenu" rows="2" placeholder="Ex: 240 sacs de cacao..." id="contenuInput"><%= dossier.contenu || '' %></textarea>
+            </div>
+
+            <!-- Documents Section with replacements -->
+            <div class="col-md-12 mt-4">
+              <h6 class="fw-bold border-bottom pb-2 mb-3 text-slate-800"><i class="bi bi-folder-fill text-warning me-1"></i> Pièces Jointes & Remplacements de Fichiers</h6>
+              
+              <!-- Supplier & Transporter Fields -->
+              <div class="row g-3 p-3 rounded mb-4 align-items-center border text-start bg-light" style="border: 1px dashed #64748b !important;">
+                <div class="col-md-4">
+                  <label class="form-label small fw-bold text-slate-700">Nom du Fournisseur</label>
+                  <input type="text" name="fournisseur_nom" class="form-control form-control-sm" value="<%= dossier.fournisseur_nom || '' %>" placeholder="Nom du fournisseur">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-bold text-slate-700">Pays du Fournisseur</label>
+                  <input type="text" name="fournisseur_pays" class="form-control form-control-sm" value="<%= dossier.fournisseur_pays || '' %>" placeholder="Pays d'origine du fournisseur">
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label small fw-bold text-slate-700">Transporteur / Compagnie</label>
+                  <input type="text" name="transporteur" class="form-control form-control-sm" value="<%= dossier.transporteur || '' %>" placeholder="Transporteur / Compagnie maritime">
+                </div>
+              </div>
+
+              <!-- BL Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">1. BL / LTA (Connaissement) <span class="text-danger">*</span></label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_bl" value="<%= filesByCat['BL'] ? filesByCat['BL'].ref : dossier.bl %>" required id="refBlInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_bl" accept=".pdf, .jpg, .jpeg, .png" id="fichierBlInput">
+                  <% if (filesByCat['BL']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['BL'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['BL'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- FAC Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">2. Facture Commerciale</label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_fac" value="<%= filesByCat['FAC'] ? filesByCat['FAC'].ref : '' %>" placeholder="Réf. Facture" id="refFacInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_fac" accept=".pdf" id="fichierFacInput">
+                  <% if (filesByCat['FAC']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['FAC'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['FAC'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- SGS Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">3. Rapport SGS</label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_sgs" value="<%= filesByCat['SGS'] ? filesByCat['SGS'].ref : '' %>" placeholder="Réf. SGS" id="refSgsInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_sgs" accept=".pdf" id="fichierSgsInput">
+                  <% if (filesByCat['SGS']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['SGS'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['SGS'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- DI Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">4. Déclaration d'Importation (DI)</label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_di" value="<%= filesByCat['DI'] ? filesByCat['DI'].ref : '' %>" placeholder="Réf. DI" id="refDiInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_di" accept=".pdf" id="fichierDiInput">
+                  <% if (filesByCat['DI']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['DI'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['DI'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- BESC Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">5. Document BESC</label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_besc" value="<%= filesByCat['BESC'] ? filesByCat['BESC'].ref : '' %>" placeholder="Réf. BESC" id="refBescInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_besc" accept=".pdf" id="fichierBescInput">
+                  <% if (filesByCat['BESC']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['BESC'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['BESC'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+              <!-- ANOR Row -->
+              <div class="row g-2 align-items-center mb-4">
+                <div class="col-md-4">
+                  <label class="form-label mb-0 fw-bold text-dark small">6. Certification ANOR</label>
+                </div>
+                <div class="col-md-4">
+                  <input type="text" class="form-control form-control-sm font-monospace" name="ref_anor" value="<%= filesByCat['ANOR'] ? filesByCat['ANOR'].ref : '' %>" placeholder="Réf. ANOR" id="refAnorInput">
+                </div>
+                <div class="col-md-4">
+                  <input type="file" class="form-control form-control-sm" name="fichier_anor" accept=".pdf" id="fichierAnorInput">
+                  <% if (filesByCat['ANOR']) { %>
+                    <div class="mt-1 text-xs"><i class="bi bi-paperclip text-success"></i> <a href="<%= filesByCat['ANOR'].file.path %>" target="_blank" class="text-decoration-none"><%= filesByCat['ANOR'].file.original %></a></div>
+                  <% } %>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Right Column: Section C -->
+    <div class="col-lg-4">
+      
+      <!-- SECTION C — INFO/FISC -->
+      <div class="card border-0 shadow-sm text-start" id="edit-section-c">
+        <div class="card-header bg-primary text-white py-3">
+          <h5 class="card-title mb-0 text-white fw-bold"><i class="bi bi-file-earmark-ruled-fill me-2"></i>SECTION C — INFO/FISC</h5>
+        </div>
+        <div class="card-body bg-light-subtle">
+          <p class="text-xs text-muted mb-3"><i class="bi bi-info-circle"></i> Données fiscales issues de la fiche de l'importateur.</p>
+          
+          <div class="mb-3">
+            <span class="small fw-semibold text-muted d-block uppercase mb-1">N.I.U</span>
+            <div class="p-2 bg-light border rounded font-monospace text-slate-700 small fw-bold" id="fisc-niu"><%= dossier.client.niu || 'NON FOURNI' %></div>
+          </div>
+
+          <div class="mb-3">
+            <span class="small fw-semibold text-muted d-block uppercase mb-1">R.C.C.M</span>
+            <div class="p-2 bg-light border rounded font-monospace text-slate-700 small fw-bold" id="fisc-rccm"><%= dossier.client.rccm || 'NON FOURNI' %></div>
+          </div>
+
+          <div class="mb-3">
+            <span class="small fw-semibold text-muted d-block uppercase mb-1">Attestation de Conformité Fiscale (ACF)</span>
+            <div class="p-2 bg-light border rounded font-monospace text-slate-700 small fw-bold" id="fisc-acf"><%= dossier.client.acf || 'NON FOURNIE' %></div>
+          </div>
+
+          <hr class="my-4">
+
+          <button type="submit" class="btn btn-primary w-full py-2.5 rounded shadow fw-bold d-inline-flex align-items-center justify-content-center" id="submit-edit-btn">
+            <i class="bi bi-save me-2 fs-5"></i> Enregistrer les Modifications
+          </button>
+          
+          <a href="/dossiers" class="btn btn-light w-full mt-2 py-2 border text-muted">
+            Annuler
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</form>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  const select = document.getElementById("clientSelect");
+  const representantInput = document.getElementById("representantInput");
+  
+  // Badges
+  const badgeCni = document.getElementById("badge-cni");
+  const badgeProcu = document.getElementById("badge-procu");
+  const fullClientLinkContainer = document.getElementById("full-client-link-container");
+
+  // Section C DOM
+  const fiscNiu = document.getElementById("fisc-niu");
+  const fiscRccm = document.getElementById("fisc-rccm");
+  const fiscAcf = document.getElementById("fisc-acf");
+
+  const repSelect = document.getElementById('representant_id');
+  const addRepLinkContainer = document.getElementById('add-rep-link-container');
+  const addRepLink = document.getElementById('add-rep-link');
+  const detailsPanel = document.getElementById('selected-rep-details');
+  const initialRepId = <%= dossier.representant_id || 'null' %>;
+  let currentClientRepresentatives = [];
+
+  async function handleClientChange(isFirstLoad = false) {
+    const clientId = select.value;
+    
+    // Reset representatives dropdown
+    repSelect.innerHTML = '<option value="">-- Sélectionnez un représentant --</option>';
+    addRepLinkContainer.style.display = 'none';
+    detailsPanel.style.display = 'none';
+    currentClientRepresentatives = [];
+
+    if (!clientId) {
+      fiscNiu.textContent = "Sélectionnez un client...";
+      fiscRccm.textContent = "Sélectionnez un client...";
+      fiscAcf.textContent = "Sélectionnez un client...";
+      representantInput.value = "";
+      fullClientLinkContainer.innerHTML = "";
+
+      // Load all representatives as a fallback
+      try {
+        const allReps = await fetch('/api/representants').then(r => r.json());
+        currentClientRepresentatives = allReps;
+        const activeAllReps = allReps.filter(r => r.actif);
+        if (activeAllReps.length > 0) {
+          const optGroupAll = document.createElement('optgroup');
+          optGroupAll.label = 'Tous les représentants';
+          activeAllReps.forEach(r => {
+            const option = document.createElement('option');
+            option.value = r.id;
+            option.textContent = (r.nom + ' ' + (r.prenom || '') + ' (' + (r.fonction || 'Représentant') + ')').trim();
+            if (isFirstLoad && r.id === initialRepId) {
+              option.selected = true;
+            }
+            optGroupAll.appendChild(option);
+          });
+          repSelect.appendChild(optGroupAll);
+          if (isFirstLoad && initialRepId) {
+            repSelect.value = initialRepId;
+            updateRepresentativeDetails(initialRepId);
+          }
+        }
+      } catch (err) {
+        console.error("Erreur de chargement initial des représentants:", err);
+      }
+      return;
+    }
+
+    try {
+      // 1. Fetch general client data
+      const res = await fetch("/api/clients/" + clientId);
+      if (!res.ok) throw new Error("Erreur");
+      const client = await res.json();
+
+      // Section C filling
+      fiscNiu.textContent = client.niu || "NON FOURNI";
+      fiscRccm.textContent = client.rccm || "NON FOURNI";
+      fiscAcf.textContent = client.acf || "NON FOURNIE";
+
+      // Badge status setup
+      if (client.has_cni) {
+        badgeCni.className = "badge bg-success-subtle text-success p-2.5 fs-7 border border-success";
+        badgeCni.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> CNI disponible';
+      } else {
+        badgeCni.className = "badge bg-warning-subtle text-warning p-2.5 fs-7 border border-warning";
+        badgeCni.innerHTML = '<i class="bi bi-exclamation-triangle-fill me-1"></i> CNI manquant';
+      }
+
+      if (client.has_procu) {
+        badgeProcu.className = "badge bg-success-subtle text-success p-2.5 fs-7 border border-success";
+        badgeProcu.innerHTML = '<i class="bi bi-check-circle-fill me-1"></i> Procuration disponible';
+      } else {
+        badgeProcu.className = "badge bg-secondary-subtle text-secondary p-2.5 fs-7 border border-secondary";
+        badgeProcu.innerHTML = '<i class="bi bi-file-earmark-lock-fill me-1"></i> Non fournie';
+      }
+
+      fullClientLinkContainer.innerHTML = `
+        <a href="/clients/${client.id}" target="_blank" class="btn btn-outline-primary btn-xs d-inline-flex align-items-center">
+          <i class="bi bi-person-fill me-1"></i> Fiche client complète <i class="bi bi-box-arrow-up-right ms-1"></i>
+        </a>
+      `;
+
+      // 2. Fetch representatives for this client and all representatives
+      const [reps, allReps] = await Promise.all([
+        fetch('/api/clients/' + clientId + '/representants').then(r => r.json()),
+        fetch('/api/representants').then(r => r.json())
+      ]);
+      currentClientRepresentatives = allReps;
+
+      const activeRepsForClient = reps.filter(r => r.actif);
+      const activeAllReps = allReps.filter(r => r.actif);
+      const otherActiveReps = activeAllReps.filter(ar => !activeRepsForClient.some(cr => cr.id === ar.id));
+
+      if (activeRepsForClient.length > 0) {
+        const optGroupClient = document.createElement('optgroup');
+        optGroupClient.label = 'Représentants de ce client';
+        activeRepsForClient.forEach(r => {
+          const option = document.createElement('option');
+          option.value = r.id;
+          option.textContent = (r.nom + ' ' + (r.prenom || '') + ' (' + (r.fonction || 'Représentant') + ')').trim();
+          if (isFirstLoad && r.id === initialRepId) {
+            option.selected = true;
+          }
+          optGroupClient.appendChild(option);
+        });
+        repSelect.appendChild(optGroupClient);
+      }
+
+      if (otherActiveReps.length > 0) {
+        const optGroupOthers = document.createElement('optgroup');
+        optGroupOthers.label = 'Tous les autres représentants';
+        otherActiveReps.forEach(r => {
+          const option = document.createElement('option');
+          option.value = r.id;
+          option.textContent = (r.nom + ' ' + (r.prenom || '') + ' (' + (r.fonction || 'Représentant') + ')').trim();
+          if (isFirstLoad && r.id === initialRepId) {
+            option.selected = true;
+          }
+          optGroupOthers.appendChild(option);
+        });
+        repSelect.appendChild(optGroupOthers);
+      }
+
+      // Configure and show the "Add new representative" link
+      addRepLink.href = '/clients/' + clientId + '/representants/create';
+      addRepLinkContainer.style.display = 'block';
+
+      // Trigger rep select details display on first load if we have initialRepId
+      if (isFirstLoad && initialRepId) {
+        repSelect.value = initialRepId;
+        updateRepresentativeDetails(initialRepId);
+      } else if (isFirstLoad) {
+        // First load with NO initialRepId, keep the free-text representation
+        representantInput.value = "<%= dossier.representant_libre || dossier.representant || '' %>";
+      }
+
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function updateRepresentativeDetails(repId) {
+    if (!repId) {
+      detailsPanel.style.display = 'none';
+      return;
+    }
+
+    const rep = currentClientRepresentatives.find(r => r.id === repId);
+    if (rep) {
+      document.getElementById('rep-cni-num').textContent = rep.cni_numero || 'Non spécifié';
+      document.getElementById('rep-tel').textContent = rep.tel || 'Non spécifié';
+      
+      let docsHtml = '';
+      if (rep.has_cni) {
+        docsHtml += '<span class="badge bg-success-subtle text-success border"><i class="bi bi-check-circle-fill"></i> CNI</span> ';
+      } else {
+        docsHtml += '<span class="badge bg-danger-subtle text-danger border"><i class="bi bi-x-circle-fill"></i> CNI</span> ';
+      }
+      if (rep.has_procu) {
+        docsHtml += '<span class="badge bg-success-subtle text-success border"><i class="bi bi-check-circle-fill"></i> Procuration</span>';
+      } else {
+        docsHtml += '<span class="badge bg-danger-subtle text-danger border"><i class="bi bi-x-circle-fill"></i> Procuration</span>';
+      }
+      
+      document.getElementById('rep-docs-status').innerHTML = docsHtml;
+      detailsPanel.style.display = 'block';
+
+      // Auto-fill the text name field for fallback
+      representantInput.value = (rep.nom + ' ' + (rep.prenom || '')).trim();
+    } else {
+      detailsPanel.style.display = 'none';
+    }
+  }
+
+  repSelect.addEventListener('change', function() {
+    updateRepresentativeDetails(parseInt(this.value));
+  });
+
+  select.addEventListener("change", () => handleClientChange(false));
+  
+  // Trigger on load
+  handleClientChange(true);
+});
+
+// Form Validation
+(function () {
+  'use strict'
+  var forms = document.querySelectorAll('.needs-validation')
+  Array.prototype.slice.call(forms).forEach(function (form) {
+    form.addEventListener('submit', function (event) {
+      if (!form.checkValidity()) {
+        event.preventDefault()
+        event.stopPropagation()
+      }
+      form.classList.add('was-validated')
+    }, false)
+  })
+})()
+</script>
+
+<%- include('../partials/footer') %>

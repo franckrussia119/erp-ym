@@ -1,0 +1,140 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const H = (h) => h == null ? '—' : h < 48 ? `${Math.round(h)} h` : `${(h / 24).toFixed(1).replace('.', ',')} j`;
+  const maxAvg = Math.max(1, ...stepStats.map(s => Math.max(s.avg || 0, s.slaHours)));
+  const maxExp = Math.max(1, ...byExpense.map(e => e[1]));
+  const maxPort = Math.max(1, ...byPort.map(p => p[1]));
+  const pill = (key) => { const s = stepStats.find(x => x.key === key); const n = s ? s.n : 9; return `<span class="stage-pill step-c-${n}">${s ? s.label : 'Archivé'}</span>`; };
+%>
+
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-speedometer"></i></span>
+  <div class="flex-grow-1">
+    <h1>Pilotage & rentabilité</h1>
+    <p class="mb-0">Délais par étape, argent avancé et récupéré, dossiers à surveiller.</p>
+  </div>
+  <div class="ph-actions"><button class="btn btn-light btn-sm" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button></div>
+</div>
+
+<div class="row g-3 mb-4 kpi-compact">
+  <% [
+    ['Avances décaissées', totals.avances, 'bi-cash-stack', 'var(--step-5)'],
+    ['Dépenses justifiées', totals.depenses, 'bi-receipt', 'var(--step-6)'],
+    ['Facturé', totals.facture, 'bi-receipt-cutoff', 'var(--step-7)'],
+    ['Encaissé', totals.encaisse, 'bi-wallet2', 'var(--c-facturation)'],
+    ['À recouvrer', totals.aRecouvrer, 'bi-hourglass-split', 'var(--c-compta)'],
+    ['Marge brute', totals.marge, 'bi-graph-up-arrow', 'var(--c-dashboard)'],
+  ].forEach(([l, v, i, c]) => { %>
+    <div class="col-6 col-md-4 col-xl-2">
+      <div class="kpi h-100" style="--k: <%= c %>">
+        <span class="k-ico"><i class="bi <%= i %>"></i></span>
+        <div class="k-label"><%= l %></div>
+        <div class="k-value"><%= F(v) %> <small>F</small></div>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-lg-4">
+    <div class="card h-100 alert-card" style="--oc: #dc2626"><div class="card-body p-4">
+      <h6 class="ac-title"><i class="bi bi-alarm-fill"></i>Dossiers en retard <span><%= alerts.enRetard.length %></span></h6>
+      <% if (!alerts.enRetard.length) { %><div class="small text-muted">Aucun dossier hors délai.</div><% } %>
+      <% alerts.enRetard.slice(0, 8).forEach(x => { %>
+        <a class="ac-row" href="/dossiers/<%= x.d.id %>"><b><%= x.d.numero %></b><span class="text-truncate"><%= x.d.client ? x.d.client.nom : '' %></span><em>+<%= H(x.late) %></em></a>
+      <% }) %>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100 alert-card" style="--oc: #0d9488"><div class="card-body p-4">
+      <h6 class="ac-title"><i class="bi bi-exclamation-triangle-fill"></i>Avances non justifiées <span><%= alerts.nonJustifies.length %></span></h6>
+      <% if (!alerts.nonJustifies.length) { %><div class="small text-muted">Toutes les avances sont justifiées.</div><% } %>
+      <% alerts.nonJustifies.slice(0, 8).forEach(x => { %>
+        <a class="ac-row" href="/dossiers/<%= x.d.id %>"><b><%= x.d.numero %></b><span class="text-truncate"><%= x.d.client ? x.d.client.nom : '' %></span><em><%= F(x.f.nonJustifie) %> F</em></a>
+      <% }) %>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100 alert-card" style="--oc: #0f766e"><div class="card-body p-4">
+      <h6 class="ac-title"><i class="bi bi-receipt"></i>Dépenses non facturées <span><%= alerts.nonFactures.length %></span></h6>
+      <% if (!alerts.nonFactures.length) { %><div class="small text-muted">Toutes les dépenses des dossiers terminés sont facturées.</div><% } %>
+      <% alerts.nonFactures.slice(0, 8).forEach(x => { %>
+        <a class="ac-row" href="/dossiers/<%= x.d.id %>#finance"><b><%= x.d.numero %></b><span class="text-truncate"><%= x.d.client ? x.d.client.nom : '' %></span><em><%= F(x.f.nonFacture) %> F</em></a>
+      <% }) %>
+    </div></div>
+  </div>
+</div>
+
+<div class="card mb-4"><div class="card-body p-4">
+  <div class="section-title mb-1"><h5 class="mb-0">Temps passé à chaque étape</h5></div>
+  <p class="small text-muted mb-3">Moyenne mesurée depuis la mise en service de l'historique. Le trait marque le délai normal de l'étape.</p>
+  <div class="step-bars">
+    <% stepStats.forEach(s => { %>
+      <div class="sb-row step-c-<%= s.n %>">
+        <span class="sb-l"><%= s.label %></span>
+        <div class="sb-track">
+          <div class="sb-fill <%= s.avg != null && s.slaHours && s.avg > s.slaHours ? 'over' : '' %>" style="width: <%= s.avg != null ? Math.max(2, s.avg / maxAvg * 100) : 0 %>%"></div>
+          <% if (s.slaHours) { %><span class="sb-sla" style="left: <%= s.slaHours / maxAvg * 100 %>%" title="Délai normal : <%= s.slaHours %> h"></span><% } %>
+        </div>
+        <span class="sb-v"><%= H(s.avg) %></span>
+        <span class="sb-n" title="Dossiers actuellement à cette étape"><%= s.count %><% if (s.late) { %> <em><%= s.late %> en retard</em><% } %></span>
+      </div>
+    <% }) %>
+  </div>
+</div></div>
+
+<div class="card mb-4">
+  <div class="card-header bg-white p-3 px-4"><h5 class="mb-0 fs-6 fw-bold">Rentabilité par dossier</h5></div>
+  <table class="table table-hover align-middle mb-0">
+    <thead><tr><th>Dossier</th><th>Étape</th><th class="text-end">Avances</th><th class="text-end">Dépenses</th><th class="text-end">Facturé</th><th class="text-end d-none d-md-table-cell">Encaissé</th><th class="text-end">Marge</th></tr></thead>
+    <tbody>
+      <% finance.forEach(x => { %>
+        <tr>
+          <td><a href="/dossiers/<%= x.d.id %>" class="fw-semibold"><%= x.d.numero %></a><div class="small text-muted text-truncate" style="max-width: 220px"><%= x.d.client ? x.d.client.nom : '' %></div></td>
+          <td><%- pill(x.d.pipeline_status) %></td>
+          <td class="text-end"><%= F(x.f.avances) %></td>
+          <td class="text-end"><%= F(x.f.depenses) %></td>
+          <td class="text-end"><%= F(x.f.facture) %></td>
+          <td class="text-end d-none d-md-table-cell"><%= F(x.f.encaisse) %></td>
+          <td class="text-end fw-bold <%= x.f.marge < 0 ? 'text-danger' : 'text-success' %>"><%= F(x.f.marge) %></td>
+        </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-5">
+    <div class="card h-100">
+      <div class="card-header bg-white p-3 px-4"><h5 class="mb-0 fs-6 fw-bold">Par client</h5></div>
+      <table class="table table-sm align-middle mb-0 tbl-tight">
+        <thead><tr><th>Client</th><th class="text-end">Dossiers</th><th class="text-end">Facturé</th><th class="text-end">Dû</th></tr></thead>
+        <tbody>
+          <% byClient.forEach(c => { %>
+            <tr><td class="text-truncate" style="max-width: 200px"><%= c.nom %></td><td class="text-end"><%= c.n %></td><td class="text-end"><%= F(c.facture) %></td><td class="text-end <%= c.aRecouvrer > 0 ? 'text-danger fw-semibold' : '' %>"><%= F(c.aRecouvrer) %></td></tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <div class="col-lg-3">
+    <div class="card h-100"><div class="card-body p-4">
+      <h5 class="fs-6 fw-bold mb-3">Par port</h5>
+      <% byPort.forEach(([p, n]) => { %>
+        <div class="hbar"><div class="d-flex justify-content-between small"><span class="text-truncate"><%= p %></span><b><%= n %></b></div><div class="hb-track"><div style="width: <%= n / maxPort * 100 %>%; --b: var(--c-dossiers)"></div></div></div>
+      <% }) %>
+    </div></div>
+  </div>
+  <div class="col-lg-4">
+    <div class="card h-100"><div class="card-body p-4">
+      <h5 class="fs-6 fw-bold mb-3">Dépenses par nature</h5>
+      <% if (!byExpense.length) { %><div class="small text-muted">Aucun bon réel pour l'instant.</div><% } %>
+      <% byExpense.forEach(([l, v]) => { %>
+        <div class="hbar"><div class="d-flex justify-content-between small gap-2"><span class="text-truncate"><%= l %></span><b class="text-nowrap"><%= F(v) %> F</b></div><div class="hb-track"><div style="width: <%= v / maxExp * 100 %>%; --b: var(--c-bons)"></div></div></div>
+      <% }) %>
+    </div></div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

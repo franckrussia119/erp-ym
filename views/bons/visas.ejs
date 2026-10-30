@@ -1,0 +1,28 @@
+<%- include('../partials/header') %>
+<%
+  const canReject = ["super_admin", "pdg", "dg", "dga", "daf", "auditeur1", "auditeur2"].includes(user.role);
+  const mine = bons.filter(b => myKey && myKey !== '*' && b['tick_' + myKey + '_by'] !== 'Non requis' && !b['tick_' + myKey]);
+  const ready = bons.filter(b => b.ordre_paiement_by || ['pdg','dg','dga','daf','audit'].every(k => b['tick_' + k]));
+%>
+
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-pen-fill"></i></span>
+  <div class="flex-grow-1">
+    <h1><%= isCaisse ? 'Bons en cours' : 'Visas en attente' %></h1>
+    <p class="mb-0"><%= isCaisse ? `${bons.length} bon(s) en cours de visa, dont ${ready.length} prêt(s) à payer. Les visas s'affichent en direct.` : (myKey && myKey !== '*' ? `${mine.length} bon(s) attendent votre visa.` : 'Tous les bons en attente de visa.') %></p>
+  </div>
+  <% if (isCaisse) { %><a href="/caisse" class="btn btn-light"><i class="bi bi-safe2 me-1"></i>Ma caisse</a><% } %>
+</div>
+
+<% if (!bons.length) { %>
+  <div class="card"><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-check2-all"></i></div><b>Aucun bon en attente</b><div class="small">Vous serez notifié dès qu'un nouveau bon arrivera.</div></div></div>
+<% } %>
+
+<div class="visa-list">
+<% bons.forEach(b => { %>
+  <%- include('_card', { b, myKey, isCaisse, canOrder, canReject, holders }) %>
+<% }) %>
+</div>
+
+<%- include('_actions') %>
+<%- include('../partials/footer') %>

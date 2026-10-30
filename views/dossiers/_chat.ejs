@@ -1,0 +1,417 @@
+<%
+  // Discussion du dossier : groupe de tous ceux qui travaillent dessus, à droite et toujours visible
+  const chatClosed = dossier.pipeline_status === "ARCHIVE";
+  const members = chatMembersList || [];
+  const ini = (u) => ((u.prenom || '').charAt(0) + (u.nom || '').charAt(0) || 'U').toUpperCase();
+%>
+<aside class="ds-chat" id="chat" aria-label="Discussion du dossier">
+  <div class="dchat">
+    <header class="dchat-head">
+      <span class="dchat-ico"><i class="bi bi-chat-heart-fill"></i></span>
+      <div class="dchat-title">
+        <b>Discussion</b>
+        <small><span id="dchatCount"><%= members.length %></span> membre<%= members.length > 1 ? 's' : '' %> · tout le monde est prévenu</small>
+      </div>
+      <div class="dchat-avatars" id="dchatAvatars" title="<%= members.map(m => [m.prenom, m.nom].filter(Boolean).join(' ')).join(', ') %>">
+        <% members.slice(0, 4).forEach(m => { %><span class="dchat-av" data-role="<%= m.role %>"><%= ini(m) %></span><% }) %>
+        <% if (members.length > 4) { %><span class="dchat-av more">+<%= members.length - 4 %></span><% } %>
+      </div>
+      <button type="button" class="dchat-close" aria-label="Fermer la discussion" data-chat-close><i class="bi bi-x-lg"></i></button>
+    </header>
+
+    <div class="dchat-body" id="dchatBody" aria-live="polite"></div>
+    <button type="button" class="dchat-new" id="dchatNew" hidden><i class="bi bi-arrow-down"></i> Nouveaux messages</button>
+
+    <% if (!chatClosed) { %>
+      <div class="dchat-mention" id="dchatMention" role="listbox" hidden></div>
+      <div class="dchat-replybar" id="dchatReply" hidden>
+        <div><b id="dchatReplyWho"></b><span id="dchatReplyText"></span></div>
+        <button type="button" aria-label="Annuler la réponse" data-reply-cancel><i class="bi bi-x-lg"></i></button>
+      </div>
+      <div class="dchat-tray" id="dchatTray" hidden></div>
+      <form class="dchat-compose" id="dchatForm" autocomplete="off">
+        <label class="dchat-attach" title="Joindre une photo, une vidéo ou un document" aria-label="Joindre un fichier">
+          <i class="bi bi-paperclip"></i>
+          <input type="file" id="dchatFiles" multiple hidden accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt,.zip">
+        </label>
+        <textarea id="dchatInput" rows="1" maxlength="2000" placeholder="Écrire un message… (@ pour mentionner)" aria-label="Message"></textarea>
+        <button type="submit" class="dchat-send" aria-label="Envoyer"><i class="bi bi-send-fill"></i></button>
+      </form>
+    <% } else { %>
+      <div class="dchat-closed"><i class="bi bi-lock-fill me-1"></i>Dossier archivé · discussion fermée</div>
+    <% } %>
+
+    <div class="dchat-menu" id="dchatMenu" role="menu" hidden></div>
+    <div class="dchat-sheet" id="dchatInfo" hidden>
+      <div class="dchat-sheet-card">
+        <div class="dchat-sheet-head"><b>Infos du message</b><button type="button" aria-label="Fermer" data-info-close><i class="bi bi-x-lg"></i></button></div>
+        <div id="dchatInfoBody"></div>
+      </div>
+    </div>
+  </div>
+</aside>
+<button type="button" class="dchat-fab" id="dchatFab" aria-label="Ouvrir la discussion" data-chat-open>
+  <i class="bi bi-chat-heart-fill"></i><span class="dchat-badge" id="dchatBadge" hidden>0</span>
+</button>
+<div class="dchat-lightbox" id="dchatLightbox" hidden><button type="button" aria-label="Fermer"><i class="bi bi-x-lg"></i></button><img alt=""></div>
+
+<script type="application/json" id="dchatData"><%- JSON.stringify({ me: user.id, admin: user.role === 'super_admin', items: chatItems || [], members: members.map(m => ({ id: m.id, nom: [m.prenom, m.nom].filter(Boolean).join(' '), role: m.role })) }).replace(/</g, '\\u003c') %></script>
+<script data-chat data-live-keep>
+(function () {
+  var dossierId = <%= dossier.id %>;
+  var body = document.getElementById('dchatBody');
+  if (!body) return;
+  var data = JSON.parse(document.getElementById('dchatData').textContent);
+  var me = data.me, items = data.items, members = data.members || [], isAdmin = data.admin;
+  var aside = document.getElementById('chat'), fab = document.getElementById('dchatFab'), badge = document.getElementById('dchatBadge');
+  var newBtn = document.getElementById('dchatNew');
+  var seenKey = 'ym-chat-seen-' + dossierId;
+  var draftKey = 'ym-chat-draft-' + dossierId;
+  var base = '/dossiers/' + dossierId;
+
+  var esc = function (s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
+  var initials = function (n) { var p = (n || 'U').trim().split(/\s+/); return ((p[0] || '').charAt(0) + (p.length > 1 ? p[p.length - 1].charAt(0) : '')).toUpperCase(); };
+  var hue = function (uid) { return (uid * 67) % 360; };
+  var hm = function (iso) { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); };
+  var when = function (iso) { var d = new Date(iso), t = new Date(); return (d.toDateString() === t.toDateString() ? "aujourd'hui" : d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })) + ' à ' + hm(iso); };
+  var size = function (n) { return n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko'; };
+  var dayLabel = function (iso) {
+    var d = new Date(iso), t = new Date(); t.setHours(0, 0, 0, 0);
+    var x = new Date(d); x.setHours(0, 0, 0, 0);
+    var diff = Math.round((t - x) / 864e5);
+    if (diff === 0) return "Aujourd'hui";
+    if (diff === 1) return 'Hier';
+    return d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  };
+  var linkify = function (html) { return html.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener">$1</a>'); };
+  var fileUrl = function (a) { return base + '/chat/file/' + encodeURIComponent(a.name); };
+  var byCid = function (cid) { for (var i = 0; i < items.length; i++) if (items[i].cid === cid) return items[i]; return null; };
+
+  // Texte du message : liens, retours à la ligne et mentions (@Nom) en surbrillance
+  function richText(it) {
+    var html = linkify(esc(it.text)).replace(/\n/g, '<br>');
+    (it.mentions || []).forEach(function (m) {
+      var tag = esc('@' + m.nom);
+      html = html.split(tag).join('<span class="dchat-at' + (m.id === me ? ' me' : '') + '">' + tag + '</span>');
+    });
+    return html;
+  }
+  function attachments(it) {
+    var att = it.att || []; if (!att.length) return '';
+    var imgs = att.filter(function (a) { return a.kind === 'image'; }), rest = att.filter(function (a) { return a.kind !== 'image'; });
+    var h = '';
+    if (imgs.length) {
+      h += '<div class="dchat-media n' + Math.min(imgs.length, 4) + '">' + imgs.slice(0, 4).map(function (a, i) {
+        return '<a href="' + fileUrl(a) + '" data-lightbox class="dchat-img"><img src="' + fileUrl(a) + '" alt="' + esc(a.original) + '" loading="lazy">' + (i === 3 && imgs.length > 4 ? '<span>+' + (imgs.length - 4) + '</span>' : '') + '</a>';
+      }).join('') + '</div>';
+    }
+    rest.forEach(function (a) {
+      if (a.kind === 'video') h += '<video class="dchat-video" src="' + fileUrl(a) + '" controls preload="metadata" playsinline></video>';
+      else if (a.kind === 'audio') h += '<audio class="dchat-audio" src="' + fileUrl(a) + '" controls preload="metadata"></audio>';
+      else h += '<a class="dchat-file" href="' + fileUrl(a) + '" target="_blank" rel="noopener"><i class="bi ' + (/pdf/.test(a.mime) ? 'bi-file-earmark-pdf' : /sheet|excel/.test(a.mime) ? 'bi-file-earmark-excel' : /word/.test(a.mime) ? 'bi-file-earmark-word' : 'bi-file-earmark') + '"></i><span><b>' + esc(a.original) + '</b><small>' + size(a.size) + '</small></span><i class="bi bi-download"></i></a>';
+    });
+    return h;
+  }
+  // Coches : ✓ envoyé · ✓✓ vu par certains · ✓✓ bleues vu par tout le groupe
+  function ticks(it) {
+    if (it.id === 'tmp') return ' <i class="bi bi-clock dchat-tick"></i>';
+    var others = members.filter(function (m) { return m.id !== it.uid; }).length;
+    var n = (it.seen || []).length;
+    if (!n) return ' <i class="bi bi-check2 dchat-tick"></i>';
+    return ' <i class="bi bi-check2-all dchat-tick' + (n >= others ? ' read' : '') + '"></i>';
+  }
+
+  function render() {
+    var atBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+    if (!items.length) {
+      body.innerHTML = '<div class="dchat-empty"><i class="bi bi-chat-dots"></i><b>Aucun message</b><span>Posez une question, envoyez une photo ou mentionnez un collègue avec @ : toute l\'équipe du dossier est prévenue.</span></div>';
+      return;
+    }
+    var html = '', lastDay = '', lastUid = null, lastAt = 0;
+    items.forEach(function (it) {
+      var day = new Date(it.at).toDateString();
+      if (day !== lastDay) { html += '<div class="dchat-day"><span>' + esc(dayLabel(it.at)) + '</span></div>'; lastDay = day; lastUid = null; }
+      if (it.k === 'sys') { html += '<div class="dchat-sys"><span>' + esc(it.text) + ' · ' + hm(it.at) + '</span></div>'; lastUid = null; return; }
+      var mine = it.uid === me;
+      var t = new Date(it.at).getTime();
+      var cont = lastUid === it.uid && t - lastAt < 5 * 60e3;
+      var mentionsMe = (it.mentions || []).some(function (m) { return m.id === me; });
+      var onlyMedia = !it.deleted && !it.text && (it.att || []).length && !it.reply;
+      html += '<div class="dchat-msg' + (mine ? ' mine' : '') + (cont ? ' cont' : '') + (it.deleted ? ' deleted' : '') + (mentionsMe ? ' tagged' : '') + '" data-cid="' + (it.cid || '') + '" id="dmsg-' + (it.cid || 'tmp') + '">' +
+        (mine || cont ? '<span class="dchat-sp"></span>' : '<span class="dchat-av" style="--h:' + hue(it.uid) + '">' + esc(initials(it.nom)) + '</span>') +
+        '<div class="dchat-bubble' + (onlyMedia ? ' media-only' : '') + '">' +
+          (!mine && !cont ? '<div class="dchat-who" style="--h:' + hue(it.uid) + '">' + esc(it.nom) + '<em>' + esc(it.role || '') + '</em></div>' : '') +
+          (it.deleted
+            ? '<div class="dchat-text dchat-del"><i class="bi bi-slash-circle"></i> ' + (mine ? 'Vous avez supprimé ce message' : 'Ce message a été supprimé') + '</div>'
+            : (it.reply ? '<button type="button" class="dchat-quote" data-goto="' + it.reply.cid + '"><b>' + esc(it.reply.nom) + '</b><span>' + esc(it.reply.text) + '</span></button>' : '') +
+              attachments(it) +
+              (it.text ? '<div class="dchat-text">' + richText(it) + '</div>' : '')) +
+          '<div class="dchat-meta">' + esc(it.stage || '') + (it.stage ? ' · ' : '') + hm(it.at) + (mine && !it.deleted ? ticks(it) : '') + '</div>' +
+          (!it.deleted && it.cid ? '<button type="button" class="dchat-more" aria-label="Actions du message" data-menu="' + it.cid + '"><i class="bi bi-chevron-down"></i></button>' : '') +
+        '</div></div>';
+      lastUid = it.uid; lastAt = t;
+    });
+    body.innerHTML = html;
+    if (atBottom || !render.done) body.scrollTop = body.scrollHeight;
+    render.done = true;
+  }
+
+  function lastMsgId() { var m = items.filter(function (i) { return i.k === 'msg'; }).pop(); return m ? m.id : ''; }
+  function unread() {
+    var seen = ''; try { seen = localStorage.getItem(seenKey) || ''; } catch (e) {}
+    var n = 0, after = !seen;
+    items.forEach(function (i) { if (i.k !== 'msg' || i.uid === me || i.deleted) return; if (after) n++; if (i.id === seen) after = true; });
+    return n;
+  }
+  // Accusé de lecture côté serveur, seulement s'il reste des messages des autres que je n'ai pas encore vus
+  var seenBusy = false;
+  function sendSeen() {
+    var pending = items.some(function (i) { return i.k === 'msg' && i.uid !== me && !i.deleted && i.cid && !(i.seen || []).some(function (s) { return s.uid === me; }); });
+    if (!pending || seenBusy) return;
+    seenBusy = true;
+    fetch(base + '/chat/seen', { method: 'POST', credentials: 'same-origin' }).catch(function () {}).finally(function () {
+      seenBusy = false;
+      var now = new Date().toISOString();
+      items.forEach(function (i) { if (i.k === 'msg' && i.uid !== me && !(i.seen || []).some(function (s) { return s.uid === me; })) (i.seen = i.seen || []).push({ uid: me, nom: '', at: now }); });
+    });
+  }
+  function markSeen() { try { localStorage.setItem(seenKey, lastMsgId()); } catch (e) {} updateBadge(); if (document.visibilityState === 'visible') sendSeen(); }
+  function chatVisible() { return aside.classList.contains('open') || getComputedStyle(fab).display === 'none'; }
+  function updateBadge() {
+    var n = chatVisible() ? 0 : unread();
+    badge.textContent = n > 9 ? '9+' : n; badge.hidden = !n;
+  }
+
+  // Message reçu en direct (appelé par live.js)
+  window.ymChatPull = function () {
+    return fetch(base + '/chat', { credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+      if (!d.ok) return;
+      var before = lastMsgId();
+      var nearBottom = body.scrollHeight - body.scrollTop - body.clientHeight < 80;
+      items = d.items; members = (d.members || []).map(function (m) { return { id: m.id, nom: [m.prenom, m.nom].filter(Boolean).join(' '), role: m.role }; });
+      var tmpKeep = pendingTmp; if (tmpKeep) items.push(tmpKeep);
+      render();
+      var cnt = document.getElementById('dchatCount'); if (cnt) cnt.textContent = members.length;
+      if (lastMsgId() !== before && !nearBottom) newBtn.hidden = false;
+      if (chatVisible() && document.visibilityState === 'visible') markSeen(); else updateBadge();
+      if (!document.getElementById('dchatInfo').hidden && infoCid) showInfo(infoCid);
+    }).catch(function () {});
+  };
+
+  body.addEventListener('scroll', function () { if (body.scrollHeight - body.scrollTop - body.clientHeight < 80) newBtn.hidden = true; closeMenu(); });
+  newBtn.addEventListener('click', function () { body.scrollTop = body.scrollHeight; newBtn.hidden = true; });
+
+  // --- Menu d'un message : répondre, infos (qui a vu), copier, supprimer ---
+  var menu = document.getElementById('dchatMenu'), menuCid = null;
+  function closeMenu() { menu.hidden = true; menuCid = null; }
+  function openMenu(cid, anchor) {
+    var it = byCid(cid); if (!it || it.deleted) return;
+    var mine = it.uid === me;
+    menu.innerHTML =
+      (form ? '<button type="button" data-act="reply"><i class="bi bi-reply"></i>Répondre</button>' : '') +
+      (form && !mine ? '<button type="button" data-act="mention"><i class="bi bi-at"></i>Mentionner ' + esc((it.nom || '').split(' ')[0]) + '</button>' : '') +
+      '<button type="button" data-act="info"><i class="bi bi-eye"></i>' + (mine ? 'Vu par…' : 'Infos') + '</button>' +
+      (it.text ? '<button type="button" data-act="copy"><i class="bi bi-copy"></i>Copier le texte</button>' : '') +
+      ((mine || isAdmin) && form ? '<button type="button" data-act="delete" class="danger"><i class="bi bi-trash3"></i>Supprimer pour tous</button>' : '');
+    menu.hidden = false; menuCid = cid;
+    var host = aside.querySelector('.dchat').getBoundingClientRect(), r = anchor.getBoundingClientRect();
+    var top = r.bottom - host.top + 4, mh = menu.offsetHeight;
+    if (top + mh > host.height - 8) top = Math.max(8, r.top - host.top - mh - 4);
+    menu.style.top = top + 'px';
+    menu.style.left = mine ? '' : Math.max(8, Math.min(r.left - host.left, host.width - menu.offsetWidth - 8)) + 'px';
+    menu.style.right = mine ? Math.max(8, host.right - r.right) + 'px' : '';
+  }
+  body.addEventListener('click', function (e) {
+    var m = e.target.closest('[data-menu]'); if (m) { e.preventDefault(); e.stopPropagation(); var c = +m.getAttribute('data-menu'); if (menuCid === c) closeMenu(); else openMenu(c, m); return; }
+    var q = e.target.closest('[data-goto]');
+    if (q) { var el = document.getElementById('dmsg-' + q.getAttribute('data-goto')); if (el) { body.scrollTo({ top: el.offsetTop - body.clientHeight / 2 + el.offsetHeight / 2, behavior: 'smooth' }); el.classList.add('flash'); setTimeout(function () { el.classList.remove('flash'); }, 1400); } return; }
+    var lb = e.target.closest('[data-lightbox]');
+    if (lb) { e.preventDefault(); var box = document.getElementById('dchatLightbox'); box.querySelector('img').src = lb.getAttribute('href'); box.hidden = false; }
+  });
+  // Appui long sur téléphone, clic droit sur ordinateur
+  var pressT = null;
+  body.addEventListener('touchstart', function (e) { var b = e.target.closest('.dchat-bubble'); if (!b || e.target.closest('a, video, audio, button')) return; pressT = setTimeout(function () { var mm = b.closest('[data-cid]'); if (mm && mm.dataset.cid) { if (navigator.vibrate) navigator.vibrate(15); openMenu(+mm.dataset.cid, b); } }, 480); }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(function (ev) { body.addEventListener(ev, function () { clearTimeout(pressT); }, { passive: true }); });
+  body.addEventListener('contextmenu', function (e) { var b = e.target.closest('.dchat-bubble'); if (!b || e.target.closest('a, video, audio')) return; var mm = b.closest('[data-cid]'); if (mm && mm.dataset.cid) { e.preventDefault(); openMenu(+mm.dataset.cid, b); } });
+  document.addEventListener('click', function (e) { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+  document.addEventListener('click', function (e) { var lb = e.target.closest && e.target.closest('#dchatLightbox'); if (lb) lb.hidden = true; });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { var lb = document.getElementById('dchatLightbox'); if (lb) lb.hidden = true; } });
+
+  menu.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-act]'); if (!b) return;
+    var it = byCid(menuCid), act = b.getAttribute('data-act'); closeMenu(); if (!it) return;
+    if (act === 'reply') setReply(it);
+    else if (act === 'mention') { insertMention({ id: it.uid, nom: it.nom }, true); }
+    else if (act === 'info') showInfo(it.cid);
+    else if (act === 'copy') { if (navigator.clipboard) navigator.clipboard.writeText(it.text); if (window.showToast) showToast('Copié', 'Le texte est dans le presse-papiers.', null, 'ok'); }
+    else if (act === 'delete') {
+      if (!confirm('Supprimer ce message pour tout le monde ?')) return;
+      fetch(base + '/chat/' + it.cid, { method: 'DELETE', credentials: 'same-origin' }).then(function (r) { return r.json(); }).then(function (d) {
+        if (!d.ok) { if (window.showToast) showToast('Suppression impossible', d.error || '', null, 'err'); return; }
+        it.deleted = true; it.text = ''; it.att = []; render(); window.ymChatPull();
+      });
+    }
+  });
+
+  // --- Infos du message : lu par / pas encore lu ---
+  var infoCid = null;
+  function showInfo(cid) {
+    var it = byCid(cid); if (!it) return; infoCid = cid;
+    var seen = (it.seen || []).slice().sort(function (a, b) { return a.at.localeCompare(b.at); });
+    var seenIds = seen.map(function (s) { return s.uid; });
+    var waiting = members.filter(function (m) { return m.id !== it.uid && seenIds.indexOf(m.id) < 0; });
+    var nameOf = function (uid, fallback) { for (var i = 0; i < members.length; i++) if (members[i].id === uid) return members[i].nom; return fallback || 'Vous'; };
+    var row = function (uid, nom, sub) { return '<div class="dchat-info-row"><span class="dchat-av" style="--h:' + hue(uid) + '">' + esc(initials(nom)) + '</span><span><b>' + esc(nom) + '</b><small>' + sub + '</small></span></div>'; };
+    document.getElementById('dchatInfoBody').innerHTML =
+      '<div class="dchat-info-msg">' + (it.text ? esc(it.text.length > 160 ? it.text.slice(0, 157) + '…' : it.text) : '📎 Pièce jointe') + '<small>Envoyé par ' + esc(it.uid === me ? 'vous' : it.nom) + ' ' + when(it.at) + '</small></div>' +
+      '<div class="dchat-info-sec"><i class="bi bi-check2-all read"></i>Lu par ' + seen.length + '</div>' +
+      (seen.length ? seen.map(function (s) { return row(s.uid, s.nom || nameOf(s.uid), when(s.at)); }).join('') : '<div class="dchat-info-none">Personne pour l\'instant.</div>') +
+      '<div class="dchat-info-sec"><i class="bi bi-check2"></i>Pas encore lu · ' + waiting.length + '</div>' +
+      (waiting.length ? waiting.map(function (m) { return row(m.id, m.nom, esc(m.role || '')); }).join('') : '<div class="dchat-info-none">Tout le groupe l\'a lu.</div>');
+    document.getElementById('dchatInfo').hidden = false;
+  }
+  document.querySelector('[data-info-close]').addEventListener('click', function () { document.getElementById('dchatInfo').hidden = true; infoCid = null; });
+  document.getElementById('dchatInfo').addEventListener('click', function (e) { if (e.target === this) { this.hidden = true; infoCid = null; } });
+
+  var form = document.getElementById('dchatForm'), input = document.getElementById('dchatInput');
+  var replyTo = null, files = [], picked = [], pendingTmp = null;
+  function setReply(it) {
+    replyTo = it;
+    document.getElementById('dchatReplyWho').textContent = it.uid === me ? 'Vous' : it.nom;
+    document.getElementById('dchatReplyText').textContent = it.text || '📎 Pièce jointe';
+    document.getElementById('dchatReply').hidden = false; input.focus();
+  }
+  function clearReply() { replyTo = null; var r = document.getElementById('dchatReply'); if (r) r.hidden = true; }
+
+  // --- Mentions : « @ » ouvre la liste des membres ---
+  var mbox = document.getElementById('dchatMention'), mq = null, mSel = 0;
+  function mentionMatches() {
+    var q = (mq || '').toLowerCase();
+    return members.filter(function (m) { return m.id !== me && (!q || m.nom.toLowerCase().split(' ').some(function (w) { return w.indexOf(q) === 0; }) || m.nom.toLowerCase().indexOf(q) === 0); }).slice(0, 6);
+  }
+  function renderMentions() {
+    var list = mentionMatches();
+    if (mq === null || !list.length) { mbox.hidden = true; return; }
+    mSel = Math.min(mSel, list.length - 1);
+    mbox.innerHTML = list.map(function (m, i) { return '<button type="button" role="option" class="' + (i === mSel ? 'on' : '') + '" data-mid="' + m.id + '"><span class="dchat-av" style="--h:' + hue(m.id) + '">' + esc(initials(m.nom)) + '</span><span><b>' + esc(m.nom) + '</b><small>' + esc(m.role || '') + '</small></span></button>'; }).join('');
+    mbox.hidden = false;
+  }
+  function mentionQuery() {
+    var v = input.value.slice(0, input.selectionStart), m = /(^|\s)@([^\s@]{0,20})$/.exec(v);
+    mq = m ? m[2] : null; renderMentions();
+  }
+  function insertMention(m, append) {
+    var tag = '@' + m.nom + ' ';
+    if (append) { input.value = (input.value && !/\s$/.test(input.value) ? input.value + ' ' : input.value) + tag; }
+    else {
+      var pos = input.selectionStart, v = input.value, start = v.slice(0, pos).lastIndexOf('@');
+      input.value = v.slice(0, start) + tag + v.slice(pos);
+      input.selectionStart = input.selectionEnd = start + tag.length;
+    }
+    if (!picked.some(function (p) { return p.id === m.id; })) picked.push({ id: m.id, nom: m.nom });
+    mq = null; mbox.hidden = true; input.focus(); input.dispatchEvent(new Event('input'));
+  }
+  if (mbox) mbox.addEventListener('mousedown', function (e) { var b = e.target.closest('[data-mid]'); if (!b) return; e.preventDefault(); var id = +b.getAttribute('data-mid'); insertMention(members.filter(function (m) { return m.id === id; })[0]); });
+
+  // --- Pièces jointes : aperçu avant envoi ---
+  var tray = document.getElementById('dchatTray');
+  function renderTray() {
+    if (!tray) return;
+    tray.hidden = !files.length;
+    tray.innerHTML = files.map(function (f, i) {
+      var isImg = /^image\//.test(f.type), isVid = /^video\//.test(f.type);
+      return '<div class="dchat-chip">' + (isImg ? '<img src="' + (f._url || (f._url = URL.createObjectURL(f))) + '" alt="">' : '<i class="bi ' + (isVid ? 'bi-camera-reels' : /^audio\//.test(f.type) ? 'bi-mic' : 'bi-file-earmark') + '"></i>') +
+        '<span>' + esc(f.name.length > 18 ? f.name.slice(0, 15) + '…' : f.name) + '<small>' + size(f.size) + '</small></span><button type="button" aria-label="Retirer" data-rm="' + i + '"><i class="bi bi-x"></i></button></div>';
+    }).join('');
+  }
+  if (tray) tray.addEventListener('click', function (e) { var b = e.target.closest('[data-rm]'); if (!b) return; files.splice(+b.getAttribute('data-rm'), 1); renderTray(); });
+  var fileInput = document.getElementById('dchatFiles');
+  if (fileInput) fileInput.addEventListener('change', function () {
+    Array.prototype.forEach.call(fileInput.files, function (f) {
+      if (f.size > 64 * 1048576) { if (window.showToast) showToast('Fichier trop lourd', f.name + ' dépasse 64 Mo.', null, 'err'); return; }
+      if (files.length < 10) files.push(f);
+    });
+    fileInput.value = ''; renderTray(); input.focus();
+  });
+
+  if (form) {
+    try { input.value = sessionStorage.getItem(draftKey) || ''; } catch (e) {}
+    var grow = function () { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 140) + 'px'; };
+    input.addEventListener('input', function () { grow(); mentionQuery(); try { sessionStorage.setItem(draftKey, input.value); } catch (e) {} });
+    input.addEventListener('click', mentionQuery);
+    input.addEventListener('keydown', function (e) {
+      if (!mbox.hidden) {
+        var list = mentionMatches();
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); mSel = (mSel + (e.key === 'ArrowDown' ? 1 : list.length - 1)) % list.length; renderMentions(); return; }
+        if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); insertMention(list[mSel]); return; }
+        if (e.key === 'Escape') { mq = null; mbox.hidden = true; return; }
+      }
+      if (e.key === 'Escape' && replyTo) { clearReply(); return; }
+      if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); }
+    });
+    grow();
+    document.querySelector('[data-reply-cancel]').addEventListener('click', clearReply);
+    // Coller une capture d'écran l'ajoute en pièce jointe
+    input.addEventListener('paste', function (e) {
+      var got = Array.prototype.filter.call((e.clipboardData && e.clipboardData.files) || [], function (f) { return /^image\//.test(f.type); });
+      if (got.length) { e.preventDefault(); got.forEach(function (f) { if (files.length < 10) files.push(f); }); renderTray(); }
+    });
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var text = input.value.trim(); if (!text && !files.length) return;
+      var btn = form.querySelector('.dchat-send'); btn.disabled = true;
+      var mentions = picked.filter(function (p) { return text.indexOf('@' + p.nom) >= 0; });
+      var sending = files.slice(), reply = replyTo;
+      // affichage immédiat, confirmé par le serveur
+      pendingTmp = { k: 'msg', id: 'tmp', at: new Date().toISOString(), uid: me, nom: '', text: text, stage: '', mentions: mentions,
+        reply: reply ? { cid: reply.cid, nom: reply.uid === me ? 'Vous' : reply.nom, text: reply.text || '📎 Pièce jointe' } : null,
+        att: sending.map(function (f) { return { name: '', original: f.name, mime: f.type, size: f.size, kind: 'file' }; }) };
+      items.push(pendingTmp);
+      input.value = ''; grow(); files = []; picked = []; renderTray(); clearReply(); try { sessionStorage.removeItem(draftKey); } catch (e2) {}
+      render(); body.scrollTop = body.scrollHeight;
+      var fail = function (msg) {
+        pendingTmp = null; items = items.filter(function (i) { return i.id !== 'tmp'; }); render();
+        input.value = text; files = sending; renderTray(); if (reply) setReply(reply);
+        if (window.showToast) showToast('Message non envoyé', msg || 'Vérifiez la connexion et réessayez.', null, 'err');
+      };
+      var done = function (d) {
+        if (!d || !d.ok) return fail(d && d.error);
+        pendingTmp = null; window.ymChatPull().then(function () { setTimeout(markSeen, 200); });
+      };
+      var payload = { contenu: text, mentions: mentions.map(function (m) { return m.id; }), reply_to: reply ? reply.cid : null };
+      if (!sending.length) {
+        fetch(base + '/comment', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+          .then(function (r) { return r.json(); }).then(done).catch(function () { fail(); })
+          .finally(function () { btn.disabled = false; input.focus(); });
+      } else {
+        // avec fichiers : envoi avec barre de progression
+        var fd = new FormData();
+        fd.append('contenu', text); fd.append('mentions', JSON.stringify(payload.mentions)); if (payload.reply_to) fd.append('reply_to', payload.reply_to);
+        sending.forEach(function (f) { fd.append('fichiers', f, f.name); });
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', base + '/comment');
+        xhr.upload.onprogress = function (ev) { var el = document.querySelector('#dmsg-tmp .dchat-meta'); if (el && ev.lengthComputable) el.innerHTML = 'Envoi… ' + Math.round(ev.loaded / ev.total * 100) + ' %'; };
+        xhr.onload = function () { var d = null; try { d = JSON.parse(xhr.responseText); } catch (er) {} done(d); btn.disabled = false; input.focus(); };
+        xhr.onerror = function () { fail(); btn.disabled = false; };
+        xhr.send(fd);
+      }
+    });
+  }
+
+  // Téléphone et petit écran : la discussion s'ouvre en panneau
+  function openChat() { aside.classList.add('open'); document.body.classList.add('chat-open'); body.scrollTop = body.scrollHeight; markSeen(); if (input && window.matchMedia('(pointer: fine)').matches) input.focus(); }
+  function closeChat() { aside.classList.remove('open'); document.body.classList.remove('chat-open'); closeMenu(); updateBadge(); }
+  fab.addEventListener('click', openChat);
+  document.addEventListener('click', function (e) {
+    if (document.body.classList.contains('chat-open') && !aside.contains(e.target) && !fab.contains(e.target) && !e.target.closest('#dchatLightbox')) closeChat();
+  });
+  window.ymChatVisible = function () { return document.visibilityState === 'visible' && chatVisible(); };
+  aside.querySelector('[data-chat-close]').addEventListener('click', closeChat);
+  if (location.hash === '#chat') { if (getComputedStyle(fab).display !== 'none') openChat(); else if (input) input.focus(); }
+
+  render();
+  if (chatVisible()) markSeen(); else updateBadge();
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible' && chatVisible()) markSeen(); });
+})();
+</script>

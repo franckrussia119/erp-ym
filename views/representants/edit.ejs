@@ -1,0 +1,101 @@
+<%- include('../partials/header') %>
+
+<div class="row mb-4 align-items-center">
+  <div class="col-sm-6">
+    <h1 class="h3 text-slate-800"><i class="bi bi-pencil-square text-primary me-2"></i>Modifier le Représentant</h1>
+    <p class="text-muted mb-0">Mettre à jour les informations professionnelles et les documents justificatifs.</p>
+  </div>
+  <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+    <a href="/representants/<%= rep.id %>" class="btn btn-outline-secondary d-inline-flex align-items-center">
+      <i class="bi bi-arrow-left me-2"></i> Annuler & Retour
+    </a>
+  </div>
+</div>
+
+<div class="row justify-content-center">
+  <div class="col-lg-9">
+    <div class="card border-0 shadow-sm">
+      <div class="card-header bg-white border-0 py-3">
+        <h5 class="card-title mb-0 fw-bold text-dark"><i class="bi bi-person-gear text-primary me-2"></i>Édition de REP-<%= rep.id %></h5>
+      </div>
+      <div class="card-body p-4">
+        <form action="/representants/<%= rep.id %>/edit" method="POST" enctype="multipart/form-data">
+          
+          <!-- Section 1 : Informations personnelles -->
+          <h6 class="text-primary text-uppercase font-monospace fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">1. Informations de contact & Identité</h6>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Nom de famille <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="nom" value="<%= rep.nom %>" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Prénom(s)</label>
+              <input type="text" class="form-control" name="prenom" value="<%= rep.prenom || "" %>">
+            </div>
+            
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Numéro de Téléphone</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-telephone"></i></span>
+                <input type="text" class="form-control" name="tel" value="<%= rep.tel || "" %>" placeholder="Ex: +237 699 99 99 99">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Adresse Email</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-envelope"></i></span>
+                <input type="email" class="form-control" name="email" value="<%= rep.email || "" %>" placeholder="Ex: jp.ndedi@gmail.com">
+              </div>
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">N° Carte Nationale d'Identité (CNI)</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-card-text"></i></span>
+                <input type="text" class="form-control" name="cni_numero" value="<%= rep.cni_numero || "" %>" placeholder="Ex: 100827391">
+              </div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-bold">Fonction / Rôle au cabinet</label>
+              <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-briefcase"></i></span>
+                <input type="text" class="form-control" name="fonction" value="<%= rep.fonction || "" %>" placeholder="Ex: Responsable Transit, Mandataire">
+              </div>
+            </div>
+          </div>
+
+          <!-- Section 2 : Pièces jointes (CNI, Procuration) -->
+          <h6 class="text-primary text-uppercase font-monospace fw-bold mb-3" style="font-size: 0.8rem; letter-spacing: 1px;">2. Remplacer les pièces jointes (Optionnel)</h6>
+          <p class="text-muted small mb-3">Téléverser un nouveau fichier écrasera l'ancien document enregistré sans détruire les fichiers physiques existants.</p>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <div class="p-3 border rounded bg-light">
+                <label class="form-label small fw-bold"><i class="bi bi-file-earmark-person text-primary me-1"></i>CNI du représentant</label>
+                <input type="file" class="form-control" name="fichier_cni_rep" accept=".pdf,.png,.jpg,.jpeg">
+                <small class="text-muted d-block mt-1">Sélectionner un fichier PDF, JPG ou PNG pour mettre à jour la CNI.</small>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="p-3 border rounded bg-light">
+                <label class="form-label small fw-bold"><i class="bi bi-file-earmark-text text-primary me-1"></i>Procuration / Mandat</label>
+                <input type="file" class="form-control" name="fichier_procu_rep" accept=".pdf,.png,.jpg,.jpeg">
+                <small class="text-muted d-block mt-1">Sélectionner un fichier PDF, JPG ou PNG pour remplacer la procuration.</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- Boutons d'actions -->
+          <div class="d-flex justify-content-end gap-2 border-top pt-3">
+            <a href="/representants/<%= rep.id %>" class="btn btn-light">Annuler</a>
+            <button type="submit" class="btn btn-primary px-4 d-inline-flex align-items-center">
+              <i class="bi bi-check-all me-2"></i> Enregistrer les modifications
+            </button>
+          </div>
+          
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

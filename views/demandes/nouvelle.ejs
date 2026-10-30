@@ -1,0 +1,78 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico" style="background: <%= T.couleur %>"><i class="bi <%= T.icon %>"></i></span>
+  <div class="flex-grow-1">
+    <h1><%= type === 'CONGE' ? 'Demande de congé ou d\'absence' : type === 'AUTRE' ? 'Nouvelle demande' : 'Demande ' + (type === 'ACHAT' ? 'd\'achat' : 'de réparation ou d\'entretien') %></h1>
+    <p class="mb-0"><%= T.aide %></p>
+  </div>
+  <a class="btn btn-light btn-sm" href="/demandes"><i class="bi bi-arrow-left me-1"></i>Demandes</a>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <form class="card card-body ops-form" method="POST" action="/demandes/nouvelle/<%= type.toLowerCase() %>" enctype="multipart/form-data">
+      <% if (type === 'CONGE') { %>
+        <div class="row g-2 mb-2">
+          <div class="col-12"><label class="form-label">Motif</label>
+            <select name="motif" class="form-select"><% CONGE_MOTIFS.forEach(m => { %><option><%= m %></option><% }) %></select></div>
+          <div class="col-6"><label class="form-label">Du <span class="text-danger">*</span></label><input type="date" name="du" class="form-control" required data-conge-du></div>
+          <div class="col-6"><label class="form-label">Au (inclus) <span class="text-danger">*</span></label><input type="date" name="au" class="form-control" required data-conge-au></div>
+          <div class="col-12"><div class="dm-days" data-conge-jours hidden></div></div>
+          <div class="col-12"><label class="form-label">Qui vous remplace ?</label><input name="interim" class="form-control" placeholder="Nom du collègue (facultatif)"></div>
+          <div class="col-12"><label class="form-label">Précision</label><input name="titre" class="form-control" maxlength="160" placeholder="Facultatif : le titre est créé à partir du motif et des dates"></div>
+        </div>
+      <% } else { %>
+        <div class="row g-2 mb-2">
+          <div class="col-12"><label class="form-label">Objet <span class="text-danger">*</span></label>
+            <input name="titre" class="form-control" maxlength="160" required placeholder="<%= type === 'ACHAT' ? 'ex. Deux imprimantes pour la facturation' : type === 'REPARATION' ? 'ex. Changement des pneus du camion LT 123 AB' : 'ex. Avance sur salaire' %>"></div>
+          <% if (type === 'REPARATION') { %>
+            <div class="col-md-6"><label class="form-label">Bien concerné</label><input name="bien" class="form-control" placeholder="Camion, véhicule, local, ordinateur…"></div>
+          <% } %>
+          <% if (type !== 'AUTRE') { %>
+            <div class="col-md-6"><label class="form-label"><%= type === 'REPARATION' ? 'Garage ou prestataire' : 'Fournisseur' %></label><input name="fournisseur" class="form-control" placeholder="Facultatif"></div>
+          <% } %>
+          <div class="col-md-6"><label class="form-label">Montant estimé (F)<%- T.montant === 'oui' ? ' <span class="text-danger">*</span>' : '' %></label>
+            <input type="number" min="0" step="any" name="montant" class="form-control text-end" <%= T.montant === 'oui' ? 'required' : '' %> data-dm-montant></div>
+          <div class="col-md-6 d-flex align-items-end"><div class="form-check mb-2"><input class="form-check-input" type="checkbox" name="urgence" value="1" id="urg"><label class="form-check-label" for="urg">Urgent</label></div></div>
+        </div>
+      <% } %>
+      <label class="form-label">Explications</label>
+      <textarea name="details" class="form-control mb-3" rows="4" maxlength="4000" placeholder="Pourquoi cette demande, ce qui est prévu…"></textarea>
+      <label class="form-label">Pièces jointes (devis, certificat, photo…)</label>
+      <input type="file" name="pieces" class="form-control mb-3" accept=".pdf,image/*" multiple>
+      <button class="btn btn-primary w-100"><i class="bi bi-send me-1"></i>Envoyer la demande</button>
+    </form>
+  </div>
+  <div class="col-lg-5">
+    <div class="card card-body dm-circuit">
+      <h6 class="mb-3"><i class="bi bi-diagram-2 me-1"></i>Qui va valider</h6>
+      <ol class="dm-circuit-list" data-dm-circuit data-type="<%= type %>">
+        <% if (!apercu.length) { %><li>Validée d'office</li><% } %>
+        <% apercu.forEach(k => { %><li><%= APPROBATEURS[k] %></li><% }) %>
+      </ol>
+      <p class="small text-muted mb-0">Chaque personne est prévenue à son tour. Vous recevez une notification à chaque étape et à la décision finale.<% if (T.montant !== 'non') { %> Le circuit peut s'allonger selon le montant.<% } %></p>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var du = document.querySelector('[data-conge-du]'), au = document.querySelector('[data-conge-au]'), out = document.querySelector('[data-conge-jours]');
+  function jours() {
+    if (!du || !du.value || !au.value) { if (out) out.hidden = true; return; }
+    var a = new Date(du.value + 'T12:00:00'), b = new Date(au.value + 'T12:00:00'), n = 0;
+    if (b < a) { out.hidden = false; out.className = 'dm-days bad'; out.textContent = 'La date de fin est avant la date de début.'; return; }
+    for (var d = new Date(a); d <= b; d.setDate(d.getDate() + 1)) if (d.getDay() % 6) n++;
+    out.hidden = false; out.className = 'dm-days'; out.textContent = n + ' jour' + (n > 1 ? 's' : '') + ' ouvré' + (n > 1 ? 's' : '') + ' (lundi à vendredi)';
+  }
+  if (du) { du.addEventListener('change', function () { if (!au.value || au.value < du.value) au.value = du.value; au.min = du.value; jours(); }); au.addEventListener('change', jours); }
+  var m = document.querySelector('[data-dm-montant]'), list = document.querySelector('[data-dm-circuit]'), t;
+  if (m) m.addEventListener('input', function () {
+    clearTimeout(t); t = setTimeout(function () {
+      fetch('/demandes/circuit/' + list.dataset.type + '?montant=' + encodeURIComponent(m.value || 0)).then(function (r) { return r.json(); }).then(function (j) {
+        list.innerHTML = j.etapes.length ? j.etapes.map(function (e) { var li = document.createElement('li'); li.textContent = e; return li.outerHTML; }).join('') : '<li>Validée d\'office</li>';
+      }).catch(function () {});
+    }, 300);
+  });
+})();
+</script>
+<%- include('../partials/footer') %>

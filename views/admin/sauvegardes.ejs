@@ -1,0 +1,60 @@
+<%- include('../partials/header') %>
+<%
+  const last = backups[0];
+  const size = (n) => n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' Mo' : Math.max(1, Math.round(n / 1024)) + ' Ko';
+  const ageH = last ? (Date.now() - new Date(last.at).getTime()) / 36e5 : null;
+  const fresh = ageH !== null && ageH < 30;
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-database-check"></i></span>
+  <div class="flex-grow-1">
+    <h1>Sauvegardes</h1>
+    <p class="mb-0">Une sauvegarde complète des données chaque jour à partir de 2 h. Les <%= keep %> plus récentes sont gardées.</p>
+  </div>
+  <form method="POST" action="/admin/sauvegardes"><button class="btn btn-primary"><i class="bi bi-cloud-arrow-down me-1"></i>Sauvegarder maintenant</button></form>
+</div>
+
+<div class="bk-status <%= fresh ? 'ok' : 'ko' %>">
+  <i class="bi <%= fresh ? 'bi-shield-check' : 'bi-exclamation-triangle' %>"></i>
+  <div>
+    <b><%= fresh ? 'Données sauvegardées' : (last ? 'Dernière sauvegarde trop ancienne' : 'Aucune sauvegarde pour l\'instant') %></b>
+    <span><%= last ? 'Dernière sauvegarde le ' + new Date(last.at).toLocaleString('fr-FR', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' }) + ' · ' + size(last.size) : 'La première sera faite cette nuit, ou maintenant avec le bouton.' %></span>
+  </div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header"><i class="bi bi-archive me-2"></i>Fichiers de sauvegarde</div>
+  <div class="card-body p-0">
+    <% if (!backups.length) { %>
+      <div class="empty-state py-5"><div class="es-ico"><i class="bi bi-database"></i></div><b>Aucune sauvegarde</b></div>
+    <% } else { %>
+      <div class="table-responsive"><table class="table align-middle mb-0">
+        <thead><tr><th>Fichier</th><th>Date</th><th class="text-end">Taille</th><th></th></tr></thead>
+        <tbody>
+          <% backups.forEach(b => { %>
+            <tr>
+              <td class="font-monospace small"><%= b.name %><% if (b.name.includes('-manuel')) { %> <span class="badge text-bg-light border">manuelle</span><% } %></td>
+              <td><%= new Date(b.at).toLocaleString('fr-FR') %></td>
+              <td class="text-end"><%= size(b.size) %></td>
+              <td class="text-end"><a class="btn btn-light btn-sm" href="/admin/sauvegardes/<%= encodeURIComponent(b.name) %>"><i class="bi bi-download me-1"></i>Télécharger</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table></div>
+    <% } %>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><i class="bi bi-life-preserver me-2"></i>En cas de problème</div>
+  <div class="card-body small">
+    <ol class="mb-2">
+      <li>Téléchargez régulièrement une sauvegarde et gardez-la hors du serveur (clé USB, Google Drive…). Les fichiers sont rangés dans <code><%= dir %></code>.</li>
+      <li>Pour restaurer : créez une base PostgreSQL vide, démarrez l'ERP dessus une fois (il crée les tables), puis lancez dans le terminal du conteneur
+        <code>node prisma/restore-backup.js <%= dir %>/NOM_DU_FICHIER.json.gz</code>. La restauration refuse une base qui contient déjà des données.</li>
+      <li>Les pièces jointes (PDF, photos, vidéos) sont dans le volume <code>/app/uploads</code> : sauvegardez-le aussi depuis le serveur.</li>
+    </ol>
+    <span class="text-muted">En plus, activez les sauvegardes planifiées de PostgreSQL dans Coolify (onglet « Backups » de la base), idéalement vers un stockage S3.</span>
+  </div>
+</div>
+<%- include('../partials/footer') %>

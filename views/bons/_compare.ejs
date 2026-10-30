@@ -1,0 +1,27 @@
+<%
+  // Comparaison prévu / réel ligne par ligne. Paramètres : items [{designation, prevu, montant, source}], prov, reel
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const hasPrevu = items.some(it => it.prevu !== undefined);
+  // Reçus par ligne (bons réels saisis avec un reçu sur chaque ligne)
+  const pieceBase = locals.pieceBase || null;
+  const hasRecus = !!pieceBase && items.some(it => Array.isArray(it.pieces));
+%>
+<div class="table-responsive">
+<table class="table table-sm align-middle mb-0 cmp-table">
+  <thead><tr><th>Désignation</th><% if (hasPrevu) { %><th class="text-end">Prévu</th><% } %><th class="text-end">Réel</th><% if (hasPrevu) { %><th class="text-end">Écart</th><% } %><% if (hasRecus) { %><th>Reçu</th><% } %></tr></thead>
+  <tbody>
+    <% items.forEach(it => { const e = (it.prevu || 0) - (it.montant || 0); %>
+      <tr class="<%= it.source === 'NOUVEAU' ? 'cmp-new' : '' %>">
+        <td><%= it.designation %><% if (it.source === 'NOUVEAU') { %> <span class="badge text-bg-light border">imprévu</span><% } %></td>
+        <% if (hasPrevu) { %><td class="text-end text-muted"><%= it.source === 'NOUVEAU' ? '—' : f(it.prevu) %></td><% } %>
+        <td class="text-end fw-semibold"><%= f(it.montant) %></td>
+        <% if (hasPrevu) { %><td class="text-end <%= e > 0 ? 'text-success' : e < 0 ? 'text-danger' : 'text-muted' %>"><%= e === 0 ? '0' : (e > 0 ? '+' : '−') + f(Math.abs(e)) %></td><% } %>
+        <% if (hasRecus) { %><td><% if ((it.pieces || []).length) { it.pieces.forEach((fn, k) => { %><a class="cmp-recu" href="<%= pieceBase + encodeURIComponent(fn) %>" target="_blank" rel="noopener" title="Voir le reçu"><i class="bi bi-paperclip"></i><%= it.pieces.length > 1 ? k + 1 : 'Voir' %></a><% }) } else if ((it.montant || 0) > 0) { %><span class="cmp-norecu">Sans reçu</span><% } %></td><% } %>
+      </tr>
+    <% }) %>
+  </tbody>
+  <tfoot>
+    <tr class="fw-bold"><td>Total</td><% if (hasPrevu) { %><td class="text-end"><%= f(prov) %></td><% } %><td class="text-end"><%= f(reel) %></td><% if (hasPrevu) { const e = prov - reel; %><td class="text-end <%= e > 0 ? 'text-success' : e < 0 ? 'text-danger' : '' %>"><%= e === 0 ? '0' : (e > 0 ? '+' : '−') + f(Math.abs(e)) %></td><% } %><% if (hasRecus) { %><td></td><% } %></tr>
+  </tfoot>
+</table>
+</div>

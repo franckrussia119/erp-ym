@@ -1,0 +1,32 @@
+<div class="mb-3">
+  <label class="form-label fw-semibold">Nom du service <span class="text-danger">*</span></label>
+  <input name="nom" class="form-control" required maxlength="80" value="<%= s ? s.nom : '' %>" placeholder="Ex : Marketing">
+</div>
+<div class="mb-3">
+  <label class="form-label fw-semibold">Description</label>
+  <input name="description" class="form-control" maxlength="240" value="<%= s && s.description ? s.description : '' %>" placeholder="Ce que fait ce service">
+</div>
+<div class="row g-2 mb-3">
+  <div class="col-8">
+    <label class="form-label fw-semibold">Responsable</label>
+    <% const nm = (u) => [u.nom, u.prenom].filter(Boolean).join(' '); const cur = s && s.responsable_id ? users.find(u => u.id === s.responsable_id) : null; %>
+    <div class="emp-combo">
+      <input type="hidden" name="responsable_id" value="<%= cur ? cur.id : '' %>">
+      <input type="search" class="form-control" value="<%= cur ? nm(cur) : '' %>" placeholder="Rechercher un employé…" autocomplete="off" data-emp-combo>
+      <div class="emp-drop" hidden>
+        <button type="button" class="emp-opt" data-id="" data-label=""><i>Aucun responsable</i></button>
+        <% users.forEach(u => { %><button type="button" class="emp-opt" data-id="<%= u.id %>" data-label="<%= nm(u) %>"><%= nm(u) %> <small class="text-muted"><%= roleLabel(u.role) %></small></button><% }) %>
+      </div>
+    </div>
+  </div>
+  <div class="col-4">
+    <label class="form-label fw-semibold">Couleur</label>
+    <input type="color" name="couleur" class="form-control form-control-color w-100" value="<%= s ? s.couleur : '#059669' %>">
+  </div>
+</div>
+<label class="form-label fw-semibold">Icône</label>
+<div class="svc-icons">
+  <% icons.forEach((ic, i) => { const on = s ? s.icone === ic : i === 0; %>
+    <label><input type="radio" name="icone" value="<%= ic %>" <%= on ? 'checked' : '' %>><span><i class="bi <%= ic %>"></i></span></label>
+  <% }) %>
+</div>

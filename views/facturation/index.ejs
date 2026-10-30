@@ -1,0 +1,160 @@
+<%- include('../partials/header') %>
+
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const ETAT = { PAYE: ['Payée', 'ok', 'bi-check-circle-fill'], EMIS: ['Émise', 'warn', 'bi-hourglass-split'], ANNULE: ['Annulée', 'off', 'bi-x-circle'], BROUILLON: ['Brouillon', 'off', 'bi-pencil'] };
+  const taux = stats.totalInvoiced ? Math.round(stats.totalPaid / stats.totalInvoiced * 100) : 0;
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-receipt-cutoff"></i></span>
+  <div class="flex-grow-1">
+    <h1>Factures et devis</h1>
+    <p class="mb-0">Les factures et devis des clients, ce qui est encaissé et ce qui reste à recouvrer (FCFA).</p>
+  </div>
+  <div class="ph-actions">
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newDocModal"><i class="bi bi-file-earmark-plus me-1"></i>Nouvelle facture ou devis</button>
+  </div>
+</div>
+
+<div class="row g-3 mb-4 kpi-compact">
+  <div class="col-md-4"><div class="kpi" style="--k: var(--step-3)"><span class="k-ico"><i class="bi bi-receipt"></i></span><div class="k-label">Facturé</div><div class="k-value"><%= F(stats.totalInvoiced) %> <small>F</small></div><div class="k-foot"><%= documents.length %> pièce(s)</div></div></div>
+  <div class="col-md-4"><div class="kpi" style="--k: #16a34a"><span class="k-ico"><i class="bi bi-cash-stack"></i></span><div class="k-label">Encaissé</div><div class="k-value"><%= F(stats.totalPaid) %> <small>F</small></div><div class="k-foot"><span class="fac-bar"><i style="width: <%= taux %>%"></i></span><%= taux %> % du facturé</div></div></div>
+  <div class="col-md-4"><div class="kpi" style="--k: #dc2626"><span class="k-ico"><i class="bi bi-clock-history"></i></span><div class="k-label">Reste à recouvrer</div><div class="k-value"><%= F(stats.totalUnpaid) %> <small>F</small></div><div class="k-foot">À relancer auprès des clients</div></div></div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+  <div class="view-toggle"><a href="/facturation" class="<%= vue === 'representants' ? 'on' : '' %>">Par représentant</a><a href="/facturation?vue=pieces" class="<%= vue === 'pieces' ? 'on' : '' %>">Toutes les pièces</a></div>
+  <% if (vue === 'representants') { %><input type="search" class="form-control form-control-sm" style="max-width:280px" placeholder="Rechercher un représentant, un client, un dossier…" oninput="var q=this.value.trim().toLowerCase();document.querySelectorAll('.fr-group').forEach(function(g){g.hidden=q&&g.dataset.q.indexOf(q)<0})"><% } %>
+</div>
+
+<% if (vue === 'representants') { const stepL = { CREE: 'Créé', GUCE: 'GUCE', VALIDATION: 'Validation', PAIEMENT_DROITS: 'Facture 1', EN_TRAITEMENT: 'En traitement', BON_PROVISOIR: 'Bon provisoire', BON_REEL: 'Bon réel', FACTURATION: 'Facturation', CLOTURE: 'Clôture', ARCHIVE: 'Archivé' }; %>
+  <% if (!groupes.length) { %><div class="card"><div class="card-body text-center text-muted py-5">Aucun dossier transmis au GUCE pour l'instant.</div></div><% } %>
+  <div class="fr-groups">
+    <% groupes.forEach((g, gi) => { const nomRep = g.rep ? [g.rep.prenom, g.rep.nom].filter(Boolean).join(' ') : 'Sans représentant'; const reste = g.facture - g.encaisse; %>
+      <div class="card mb-2 fr-group" data-q="<%= [nomRep, ...g.dossiers.map(d => [d.client && d.client.nom, d.numero, d.numero_ordre, d.bl].join(' '))].join(' ').toLowerCase() %>">
+        <button class="fr-head collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#frg<%= gi %>" aria-expanded="false">
+          <span class="fr-av"><i class="bi <%= g.rep ? 'bi-person-badge' : 'bi-question-circle' %>"></i></span>
+          <span class="fr-main"><b><%= nomRep %></b><small><%= g.dossiers.length %> dossier(s)<%= g.rep && g.rep.tel ? ' · ' + g.rep.tel : '' %></small></span>
+          <span class="fr-num"><small>Dépenses</small><b><%= F(g.depenses) %> F</b></span>
+          <span class="fr-num"><small>Facturé</small><b><%= F(g.facture) %> F</b></span>
+          <span class="fr-num <%= reste > 0.5 ? 'text-danger' : 'text-success' %>"><small>Reste</small><b><%= F(reste) %> F</b></span>
+          <i class="bi bi-chevron-down fr-chev"></i>
+        </button>
+        <div class="collapse" id="frg<%= gi %>">
+          <div class="table-responsive">
+            <table class="table table-sm align-middle mb-0">
+              <thead><tr><th>Dossier</th><th>Étape</th><th class="text-end">Dépenses</th><th>Factures</th><th class="text-end">Facturé</th><th class="text-end">Encaissé</th><th></th></tr></thead>
+              <tbody>
+                <% g.dossiers.forEach(d => { %>
+                  <tr>
+                    <td><a href="/dossiers/<%= d.id %>" class="fw-semibold">N° <%= d.numero_ordre %></a><small class="d-block text-muted"><%= d.client ? d.client.nom : '' %> · BL <%= d.bl || '—' %></small></td>
+                    <td class="small"><%= stepL[d.pipeline_status] || d.pipeline_status %></td>
+                    <td class="text-end small text-nowrap"><%= F(d.depenses) %> F</td>
+                    <td class="small"><% if (!d.docs.length) { %><span class="text-muted">Pas encore facturé</span><% } %><% d.docs.forEach(x => { %><a href="/facturation/<%= x.id %>" class="d-block"><%= x.numero %><span class="text-muted"> · <%= x.phase === 'DROITS' ? 'Facture 1' : 'Finale' %></span></a><% }) %></td>
+                    <td class="text-end small fw-semibold text-nowrap"><%= F(d.facture) %> F</td>
+                    <td class="text-end small text-nowrap <%= d.facture - d.encaisse > 0.5 ? 'text-danger' : 'text-success' %>"><%= F(d.encaisse) %> F</td>
+                    <td class="text-end"><a href="/dossiers/<%= d.id %>#finance" class="btn btn-sm btn-light" title="Facturation du dossier">Facturation</a></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+          <% if (g.rep) { %><div class="px-3 py-2 border-top small"><a href="/comptes/representant/<%= g.rep.id %>"><i class="bi bi-journal-text me-1"></i>Compte et activité du représentant</a></div><% } %>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+<% } else { %>
+<div class="card rh-table-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 rh-table fac-table">
+      <thead><tr><th>Pièce</th><th>Client</th><th class="text-end">Montant TTC</th><th>Encaissement</th><th>État</th><th>Émise le</th><th></th></tr></thead>
+      <tbody>
+        <% if (!documents || !documents.length) { %>
+          <tr><td colspan="7" class="text-center text-muted py-5"><i class="bi bi-receipt d-block fs-2 mb-2"></i>Aucune facture ni devis pour l'instant.</td></tr>
+        <% } %>
+        <% (documents || []).forEach(doc => {
+          const paye = doc.payments ? doc.payments.reduce((t, p) => t + p.montant, 0) : 0;
+          const reste = doc.total_ttc - paye;
+          const pct = doc.total_ttc ? Math.min(100, Math.round(paye / doc.total_ttc * 100)) : 0;
+          const et = ETAT[doc.etat] || ETAT.BROUILLON; %>
+          <tr onclick="location.href='/facturation/<%= doc.id %>'">
+            <td><a href="/facturation/<%= doc.id %>" class="fw-bold text-decoration-none" onclick="event.stopPropagation()"><%= doc.numero %></a><small class="d-block"><span class="fac-type <%= doc.type === 'FACTURE' ? '' : 'devis' %>"><%= doc.type === 'FACTURE' ? 'Facture' : 'Devis' %></span></small></td>
+            <td class="fac-client"><b title="<%= doc.client.nom %>"><%= doc.client.nom %></b><small>NIU <%= doc.client.niu || '—' %></small></td>
+            <td class="text-end"><b><%= F(doc.total_ttc) %> F</b><small class="d-block text-muted">HT <%= F(doc.total_ht) %></small></td>
+            <td class="fac-pay"><span class="fac-bar"><i style="width: <%= pct %>%"></i></span><small><% if (reste > 0.5) { %><span class="text-danger fw-semibold">Reste <%= F(reste) %> F</span><% } else { %><span class="text-success fw-semibold">Soldée</span><% } %><%= paye > 0 && reste > 0.5 ? ' · payé ' + F(paye) : '' %></small></td>
+            <td><span class="rh-state <%= et[1] %>"><i class="bi <%= et[2] %>"></i><%= et[0] %></span></td>
+            <td class="text-muted small text-nowrap"><%= new Date(doc.created_at).toLocaleDateString('fr-FR') %></td>
+            <td class="text-end text-nowrap" onclick="event.stopPropagation()">
+              <a href="/facturation/<%= doc.id %>/pdf" class="btn btn-sm btn-light" target="_blank" title="PDF"><i class="bi bi-file-earmark-pdf"></i></a>
+              <form action="/facturation/delete/<%= doc.id %>" method="POST" class="d-inline" onsubmit="return confirm('Supprimer cette pièce ?');"><button type="submit" class="btn btn-sm btn-light text-danger" title="Supprimer"><i class="bi bi-trash"></i></button></form>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+
+<!-- New Document Modal -->
+<div class="modal fade" id="newDocModal" tabindex="-1" aria-labelledby="newDocModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content shadow border-0">
+      <div class="modal-header bg-slate-900 text-white">
+        <h5 class="modal-title fw-bold text-white fs-6" id="newDocModalLabel">Initialiser un Devis ou Facture</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="/facturation/new" method="POST">
+        <div class="modal-body text-start">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Élément Client Débiteur <span class="text-danger">*</span></label>
+            <select class="form-select" name="client_id" required>
+              <option value="">-- Sélectionnez le client --</option>
+              <% if (clients && clients.length > 0) { %>
+                <% clients.forEach(cl => { %>
+                  <option value="<%= cl.id %>" <%= typeof preselectedClientId !== 'undefined' && preselectedClientId == cl.id ? 'selected' : '' %>><%= cl.nom %></option>
+                <% }) %>
+              <% } %>
+            </select>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Type de Document <span class="text-danger">*</span></label>
+              <select class="form-select" name="type" required>
+                <option value="FACTURE">FACTURE DE PRESTATIONS</option>
+                <option value="DEVIS">DEVIS ESTIMATIF</option>
+              </select>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">Générer N° de pièce</label>
+              <% 
+                const runningFACNum = Math.floor(1000 + Math.random() * 9000);
+                const suggestedNum = 'FAC-2026-' + runningFACNum;
+              %>
+              <input type="text" class="form-control font-monospace" name="numero" value="<%= suggestedNum %>" required>
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Cabinet émetteur (Société)</label>
+            <input type="text" class="form-control" name="societe" value="YM-TRANSIT" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">État Initial</label>
+            <select class="form-select" name="etat">
+              <option value="BROUILLON">BROUILLON</option>
+              <option value="EMIS">ÉMIS / EN ATTENTE</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary btn-sm"><i class="bi bi-file-earmark-diff"></i> Créer l'en-tête</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

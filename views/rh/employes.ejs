@@ -1,0 +1,47 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const full = (e) => [e.nom, e.prenom].filter(Boolean).join(' ');
+  const ini = (e) => ((e.prenom || '')[0] || '') + (e.nom || '?')[0];
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-people"></i></span>
+  <div class="flex-grow-1">
+    <h1>Employés</h1>
+    <p class="mb-0"><%= employes.length %> <%= filtre.statut === 'sortis' ? 'sorti' : 'employé' %><%= employes.length > 1 ? 's' : '' %><%= filtre.statut === 'sortis' ? ' des effectifs' : ' en poste' %>.</p>
+  </div>
+  <a class="btn btn-primary btn-sm" href="/rh/employes/nouveau"><i class="bi bi-person-plus me-1"></i>Nouvel employé</a>
+</div>
+<%- include('_nav') %>
+
+<form class="rh-filters" method="GET">
+  <div class="rf-search"><i class="bi bi-search"></i><input type="search" name="q" class="form-control" placeholder="Nom, matricule, poste…" value="<%= filtre.q %>"></div>
+  <select name="service" class="form-select" onchange="this.form.submit()"><option value="">Tous les services</option><% services.forEach(s => { %><option value="<%= s.id %>" <%= filtre.service === s.id ? 'selected' : '' %>><%= s.nom %></option><% }) %></select>
+  <select name="statut" class="form-select" onchange="this.form.submit()"><option value="actifs">En poste</option><option value="sortis" <%= filtre.statut === 'sortis' ? 'selected' : '' %>>Sortis</option></select>
+  <label class="rf-check"><input type="checkbox" name="a_completer" value="1" <%= filtre.aCompleter ? 'checked' : '' %> onchange="this.form.submit()"> Dossiers à compléter</label>
+</form>
+
+<% if (!employes.length) { %><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-people"></i></div><b>Aucun employé</b><span>Changez les filtres ou ajoutez un employé.</span></div><% } else { %>
+<div class="card rh-table-card">
+  <div class="table-responsive">
+    <table class="table align-middle mb-0 rh-table">
+      <thead><tr><th>Employé</th><th>Poste</th><th>Service</th><th>Contrat</th><th class="text-end">Salaire de base</th><th>Dossier</th><th></th></tr></thead>
+      <tbody>
+        <% employes.forEach(e => { const manque = [!e.salaire_base && 'salaire', !e.poste && 'poste', !e.cnps_numero && 'CNPS'].filter(Boolean); %>
+          <tr onclick="location.href='/rh/employes/<%= e.id %>'">
+            <td><div class="rh-who"><span class="rh-av" style="--d: <%= e.departement ? e.departement.couleur : '#94a3b8' %>"><%= ini(e) %></span><span><b><%= full(e) %></b><small class="font-monospace"><%= e.matricule %><% if (!e.user) { %> · sans compte<% } %></small></span></div></td>
+            <td class="<%= e.poste ? '' : 'text-muted fst-italic' %>"><%= e.poste || 'À renseigner' %></td>
+            <td><% if (e.departement) { %><span class="dept-chip" style="--d: <%= e.departement.couleur %>"><%= e.departement.nom %></span><% } else { %><span class="text-muted">—</span><% } %></td>
+            <td><span class="badge text-bg-light border"><%= CONTRATS[e.type_contrat] || e.type_contrat %></span></td>
+            <td class="text-end fw-semibold"><%= e.salaire_base ? F(e.salaire_base) + ' F' : '—' %></td>
+            <td><% if (manque.length) { %><span class="rh-state warn" title="Manque : <%= manque.join(', ') %>"><i class="bi bi-exclamation-circle"></i>Manque <%= manque.join(', ') %></span><% } else { %><span class="rh-state ok"><i class="bi bi-check-circle"></i>Complet</span><% } %></td>
+            <td class="text-end"><a href="/rh/employes/<%= e.id %>/modifier" class="btn btn-sm btn-light" onclick="event.stopPropagation()" title="Modifier"><i class="bi bi-pencil"></i></a></td>
+          </tr>
+        <% }) %>
+      </tbody>
+      <% if (filtre.statut !== 'sortis') { %><tfoot><tr><td colspan="4" class="text-muted small"><%= employes.length %> employé(s)</td><td class="text-end fw-bold"><%= F(masse) %> F</td><td colspan="2" class="text-muted small">masse salariale de base</td></tr></tfoot><% } %>
+    </table>
+  </div>
+</div>
+<% } %>
+<%- include('../partials/footer') %>

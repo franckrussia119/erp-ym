@@ -1,0 +1,25 @@
+<%# Lignes de primes : libellé, montant, imposable. Paramètre : primes (tableau) %>
+<div class="rh-primes" data-primes>
+  <div data-prime-rows>
+    <% (primes.length ? primes : [{ libelle: '', montant: '', imposable: true }]).forEach(p => { %>
+      <div class="rh-prime" data-prime>
+        <input name="prime_libelle" class="form-control form-control-sm" placeholder="ex. Prime de transport" value="<%= p.libelle %>">
+        <input name="prime_montant" type="number" min="0" step="1" class="form-control form-control-sm text-end" placeholder="Montant" value="<%= p.montant %>">
+        <select name="prime_imposable" class="form-select form-select-sm"><option value="1">Imposable</option><option value="0" <%= p.imposable === false ? 'selected' : '' %>>Non imposable</option></select>
+        <button type="button" class="btn btn-sm btn-link text-danger p-0" data-prime-del aria-label="Retirer"><i class="bi bi-trash"></i></button>
+      </div>
+    <% }) %>
+  </div>
+  <button type="button" class="btn btn-light btn-sm mt-1" data-prime-add><i class="bi bi-plus-lg me-1"></i>Ajouter une prime</button>
+</div>
+<script>
+  if (!window.ymPrimes) {
+    window.ymPrimes = true;
+    document.addEventListener('click', function (e) {
+      var add = e.target.closest('[data-prime-add]');
+      if (add) { var rows = add.closest('[data-primes]').querySelector('[data-prime-rows]'), r = rows.querySelector('[data-prime]').cloneNode(true); r.querySelectorAll('input').forEach(function (i) { i.value = ''; }); r.querySelector('select').value = '1'; rows.appendChild(r); r.querySelector('input').focus(); return; }
+      var del = e.target.closest('[data-prime-del]');
+      if (del) { var rs = del.closest('[data-prime-rows]'), row = del.closest('[data-prime]'); if (rs.children.length > 1) row.remove(); else row.querySelectorAll('input').forEach(function (i) { i.value = ''; }); }
+    });
+  }
+</script>

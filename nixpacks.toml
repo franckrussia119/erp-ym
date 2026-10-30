@@ -1,0 +1,6 @@
+[phases.build]
+cmds = ["npm ci", "npm run build"]
+
+[start]
+# prisma-check.js synchronise le schéma SANS --accept-data-loss et ne supprime jamais la base.
+cmd = "node prisma-check.js && node dist/server.cjs"

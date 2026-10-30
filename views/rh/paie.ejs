@@ -1,0 +1,37 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const ST = { BROUILLON: ['En préparation', 'warning'], VALIDEE: ['Validée, à payer', 'primary'], PAYEE: ['Payée', 'success'] };
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-cash-stack"></i></span>
+  <div class="flex-grow-1">
+    <h1>Paie</h1>
+    <p class="mb-0">La RH prépare la paie du mois, le DAF, le DG ou le PDG la valide : l'écriture comptable est alors passée et chaque employé reçoit son bulletin.</p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/rh/bareme"><i class="bi bi-sliders me-1"></i>Barème</a>
+  </div>
+</div>
+<%- include('_nav') %>
+
+<form class="card card-body mb-4 d-flex flex-row flex-wrap align-items-end gap-2" method="POST" action="/rh/paie">
+  <div><label class="form-label small mb-1">Mois</label><select name="mois" class="form-select form-select-sm"><% MOIS.forEach((m, i) => { %><option value="<%= i + 1 %>" <%= next.mois === i + 1 ? 'selected' : '' %>><%= m %></option><% }) %></select></div>
+  <div><label class="form-label small mb-1">Année</label><input type="number" name="annee" class="form-control form-control-sm" style="width: 6rem" value="<%= next.annee %>"></div>
+  <button class="btn btn-primary btn-sm"><i class="bi bi-plus-lg me-1"></i>Préparer la paie</button>
+  <small class="text-muted ms-md-2">Un bulletin est créé pour chaque employé en poste avec un salaire de base.</small>
+</form>
+
+<% if (!periodes.length) { %><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-cash-stack"></i></div><b>Aucune paie pour l'instant</b></div><% } %>
+<div class="dm-list">
+  <% periodes.forEach(p => { const s = ST[p.statut]; const net = p.bulletins.reduce((t, b) => t + b.net, 0), cout = p.bulletins.reduce((t, b) => t + b.cout_total, 0); %>
+    <a class="dm-item text-decoration-none text-reset" href="/rh/paie/<%= p.id %>" style="--d: var(--bs-<%= s[1] %>)">
+      <span class="dm-main">
+        <span class="dm-ico" style="--d: var(--bs-<%= s[1] %>)"><i class="bi bi-calendar3"></i></span>
+        <span class="dm-txt"><b><%= periodeLabel(p) %></b><small><%= p.bulletins.length %> bulletin<%= p.bulletins.length > 1 ? 's' : '' %> · coût total <%= F(cout) %> F</small></span>
+        <span class="dm-right"><b class="dm-amt">Net <%= F(net) %> F</b><span class="badge text-bg-<%= s[1] %>"><%= s[0] %></span></span>
+      </span>
+    </a>
+  <% }) %>
+</div>
+<%- include('../partials/footer') %>

@@ -1,0 +1,92 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const who = (u) => [u.prenom, u.nom].filter(Boolean).join(' ');
+  const dt = (d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const dd = (s) => new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const card = (d, opts = {}) => {
+    const T = TYPES[d.type] || TYPES.AUTRE, S = STATE[d.etat], ec = etapeCourante(d);
+    const don = JSON.parse(d.donnees_json || '{}');
+    return { T, S, ec, don };
+  };
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-inboxes"></i></span>
+  <div class="flex-grow-1">
+    <h1>Demandes</h1>
+    <p class="mb-0">Congés, achats, réparations : chaque demande suit son circuit de validation, étape par étape.</p>
+  </div>
+</div>
+
+<div class="dm-new">
+  <% Object.entries(TYPES).forEach(([k, T]) => { %>
+    <a class="dm-new-card" href="/demandes/nouvelle/<%= k.toLowerCase() %>" style="--d: <%= T.couleur %>">
+      <span class="dm-ico"><i class="bi <%= T.icon %>"></i></span>
+      <span><b><%= T.label %></b><small><%= T.aide %></small></span>
+      <i class="bi bi-plus-lg ms-auto"></i>
+    </a>
+  <% }) %>
+</div>
+
+<% if (absents.length) { %>
+  <div class="dm-absents">
+    <i class="bi bi-person-dash"></i>
+    <div><b>Absents cette semaine :</b>
+      <% absents.forEach((a, i) => { %><a href="/demandes/<%= a.id %>"><%= a.nom %></a> <small>(<%= dd(a.du) %> → <%= dd(a.au) %>)</small><%= i < absents.length - 1 ? ', ' : '' %><% }) %>
+    </div>
+  </div>
+<% } %>
+
+<ul class="nav nav-pills dm-tabs mb-3">
+  <li class="nav-item"><a class="nav-link <%= onglet === 'a-valider' ? 'active' : '' %>" href="?vue=a-valider">À valider<% if (aFaire.length) { %> <span class="badge text-bg-danger"><%= aFaire.length %></span><% } %></a></li>
+  <li class="nav-item"><a class="nav-link <%= onglet === 'mes-demandes' ? 'active' : '' %>" href="?vue=mes-demandes">Mes demandes</a></li>
+  <% if (voirTout) { %><li class="nav-item"><a class="nav-link <%= onglet === 'toutes' ? 'active' : '' %>" href="?vue=toutes">Toutes</a></li><% } %>
+</ul>
+
+<% if (onglet === 'toutes') { %>
+  <form class="d-flex flex-wrap gap-2 mb-3" method="GET">
+    <input type="hidden" name="vue" value="toutes">
+    <select name="type" class="form-select form-select-sm w-auto" onchange="this.form.submit()"><option value="">Tous les types</option><% Object.entries(TYPES).forEach(([k, T]) => { %><option value="<%= k %>" <%= filtre.type === k ? 'selected' : '' %>><%= T.label %></option><% }) %></select>
+    <select name="etat" class="form-select form-select-sm w-auto" onchange="this.form.submit()"><option value="">Tous les états</option><% Object.entries(STATE).forEach(([k, S]) => { %><option value="<%= k %>" <%= filtre.etat === k ? 'selected' : '' %>><%= S.label %></option><% }) %></select>
+  </form>
+<% } %>
+
+<% const liste = onglet === 'a-valider' ? aFaire : onglet === 'toutes' ? toutes : miennes; %>
+<% if (!liste.length) { %>
+  <div class="empty-state py-5"><div class="es-ico"><i class="bi <%= onglet === 'a-valider' ? 'bi-check2-all' : 'bi-inbox' %>"></i></div>
+    <b><%= onglet === 'a-valider' ? 'Rien à valider pour le moment' : 'Aucune demande' %></b>
+    <% if (onglet === 'mes-demandes') { %><p class="small text-muted mb-0">Choisissez un type de demande ci-dessus pour commencer.</p><% } %>
+  </div>
+<% } %>
+<div class="dm-list">
+  <% liste.forEach(d => { const { T, S, ec, don } = card(d); %>
+    <div class="dm-item" style="--d: <%= T.couleur %>">
+      <a class="dm-main" href="/demandes/<%= d.id %>">
+        <span class="dm-ico"><i class="bi <%= T.icon %>"></i></span>
+        <span class="dm-txt">
+          <b><%= d.titre %></b>
+          <small>
+            <%= d.numero %> · <%= T.label %><% if (onglet !== 'mes-demandes') { %> · <%= who(d.demandeur) %><% } %>
+            <% if (d.type === 'CONGE' && don.du) { %> · du <%= dd(don.du) %> au <%= dd(don.au) %><% } %>
+            · <%= dt(d.created_at) %>
+          </small>
+        </span>
+        <span class="dm-right">
+          <% if (d.montant) { %><b class="dm-amt"><%= F(d.montant) %> F</b><% } %>
+          <span class="badge text-bg-<%= S.cls %> dm-state"><i class="bi <%= S.icon %> me-1"></i><%= ec ? 'Chez : ' + APPROBATEURS[ec.approbateur] : S.label %></span>
+        </span>
+      </a>
+      <div class="dm-steps">
+        <% d.etapes.forEach(e => { %><span class="dm-step <%= e.decision === 'APPROUVE' ? 'ok' : e.decision === 'REFUSE' ? 'ko' : ec && ec.id === e.id ? 'now' : '' %>" title="<%= APPROBATEURS[e.approbateur] %>"><%= APPROBATEURS[e.approbateur] %></span><% }) %>
+      </div>
+      <% if (onglet === 'a-valider') { %>
+        <form class="dm-quick" method="POST" action="/demandes/<%= d.id %>/decision">
+          <input type="hidden" name="retour" value="liste">
+          <button class="btn btn-success btn-sm" name="decision" value="APPROUVE"><i class="bi bi-check-lg me-1"></i>Valider</button>
+          <a class="btn btn-light btn-sm" href="/demandes/<%= d.id %>#decision">Refuser…</a>
+        </form>
+      <% } %>
+    </div>
+  <% }) %>
+</div>
+<%- include('../partials/footer') %>

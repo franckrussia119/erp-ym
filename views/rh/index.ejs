@@ -1,0 +1,94 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const dd = (s) => new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+  const dl = (d) => new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+  const masse = derniere ? derniere.bulletins.reduce((t, b) => t + b.cout_total, 0) : 0;
+  const maxS = Math.max(1, ...parService.map(s => s.n));
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-person-vcard"></i></span>
+  <div class="flex-grow-1">
+    <h1>Ressources humaines</h1>
+    <p class="mb-0">Ce qui attend la RH, puis l'effectif, les absences et la paie.</p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/rh/paie"><i class="bi bi-cash-stack me-1"></i>Paie</a>
+    <a class="btn btn-primary btn-sm" href="/rh/employes/nouveau"><i class="bi bi-person-plus me-1"></i>Nouvel employé</a>
+  </div>
+</div>
+<%- include('_nav') %>
+
+<%
+  const pc = paieCourante;
+  const paieEtat = !pc ? ['À préparer', 'Préparez la paie de ' + moisCourant, '/rh/paie', 'warn']
+    : pc.statut === 'BROUILLON' ? ['En préparation', pc._count.bulletins + ' bulletin(s) · à faire valider', '/rh/paie/' + pc.id, 'warn']
+    : pc.statut === 'VALIDEE' ? ['Validée, à payer', 'Enregistrez le paiement', '/rh/paie/' + pc.id, 'info']
+    : ['Payée', 'La paie de ' + moisCourant + ' est réglée', '/rh/paie/' + pc.id, 'ok'];
+  const todo = [
+    { ico: 'bi-cash-stack', titre: 'Paie de ' + moisCourant, etat: paieEtat[0], texte: paieEtat[1], href: paieEtat[2], ton: paieEtat[3] },
+    { ico: 'bi-person-exclamation', titre: 'Dossiers à compléter', etat: incomplets ? incomplets + ' employé' + (incomplets > 1 ? 's' : '') : 'Tous complets', texte: incomplets ? 'Salaire, poste ou n° CNPS manquant' : 'Salaire, poste et CNPS renseignés', href: '/rh/employes?a_completer=1', ton: incomplets ? 'warn' : 'ok' },
+    { ico: 'bi-calendar2-check', titre: 'Congés à valider', etat: enAttente ? enAttente + ' demande' + (enAttente > 1 ? 's' : '') : 'Aucune', texte: enAttente ? 'En attente de décision' : 'Rien en attente', href: '/demandes?vue=toutes&type=CONGE&etat=EN_ATTENTE', ton: enAttente ? 'info' : 'ok' },
+    { ico: 'bi-hourglass-split', titre: 'Fins de contrat', etat: finContrat.length ? finContrat.length + ' dans 30 jours' : 'Aucune', texte: finContrat.length ? 'Renouveler ou préparer le départ' : 'Aucun contrat ne finit bientôt', href: '#fins', ton: finContrat.length ? 'warn' : 'ok' },
+  ];
+%>
+<section class="rh-todo">
+  <% todo.forEach(t => { %>
+    <a class="rh-todo-item <%= t.ton %>" href="<%= t.href %>">
+      <span class="rt-ico"><i class="bi <%= t.ico %>"></i></span>
+      <span class="rt-txt"><small><%= t.titre %></small><b><%= t.etat %></b><em><%= t.texte %></em></span>
+      <i class="bi bi-chevron-right rt-go"></i>
+    </a>
+  <% }) %>
+</section>
+
+<div class="row g-3 mb-4 kpi-compact">
+  <% [
+    ['Effectif en poste', effectif, 'bi-people', 'var(--step-3)', '/rh/employes'],
+    ['Absents cette semaine', absents.length, 'bi-person-dash', '#0d9488', '#absents'],
+    ['Services', parService.length, 'bi-diagram-3', 'var(--step-5)', '/admin/services'],
+    [derniere ? 'Coût de la paie · ' + periodeLabel(derniere) : 'Coût de la dernière paie', F(masse) + ' F', 'bi-graph-up', 'var(--c-compta)', derniere ? '/rh/paie/' + derniere.id : '/rh/paie'],
+  ].forEach(([l, v, i, c, h]) => { %>
+    <div class="col-6 col-xl-3">
+      <a class="kpi h-100 text-decoration-none" style="--k: <%= c %>" href="<%= h %>">
+        <span class="k-ico"><i class="bi <%= i %>"></i></span>
+        <div class="k-label"><%= l %></div>
+        <div class="k-value"><%= v %></div>
+      </a>
+    </div>
+  <% }) %>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="card h-100">
+      <div class="card-header"><i class="bi bi-diagram-3 me-2"></i>Effectif par service</div>
+      <div class="card-body">
+        <% parService.forEach(s => { %>
+          <a class="rh-bar" href="/rh/employes?service=<%= s.id %>" style="--d: <%= s.couleur %>"><span><%= s.nom %></span><i style="width: <%= (s.n / maxS * 100).toFixed(1) %>%"></i><b><%= s.n %></b></a>
+        <% }) %>
+        <% if (sansService) { %><div class="small text-muted mt-2"><%= sansService %> sans service</div><% } %>
+        <div class="d-flex flex-wrap gap-2 mt-3">
+          <% parContrat.forEach(([l, n]) => { %><span class="badge text-bg-light border"><%= l %> : <%= n %></span><% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-lg-6">
+    <div class="card mb-4" id="absents">
+      <div class="card-header"><i class="bi bi-person-dash me-2"></i>Absents cette semaine</div>
+      <div class="card-body">
+        <% if (!absents.length) { %><div class="text-muted small">Personne n'est en congé cette semaine.</div><% } %>
+        <% absents.forEach(a => { %><div class="rh-line"><a href="/demandes/<%= a.id %>"><b><%= a.nom %></b></a><span><%= a.motif %> · <%= dd(a.du) %> → <%= dd(a.au) %></span></div><% }) %>
+      </div>
+    </div>
+    <div class="card" id="fins">
+      <div class="card-header"><i class="bi bi-hourglass-split me-2"></i>Contrats qui finissent dans 30 jours</div>
+      <div class="card-body">
+        <% if (!finContrat.length) { %><div class="text-muted small">Aucun.</div><% } %>
+        <% finContrat.forEach(e => { %><div class="rh-line"><a href="/rh/employes/<%= e.id %>"><b><%= [e.prenom, e.nom].filter(Boolean).join(' ') %></b></a><span><%= CONTRATS[e.type_contrat] %> · fin le <%= dl(e.date_fin_contrat) %></span></div><% }) %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

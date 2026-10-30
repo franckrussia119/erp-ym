@@ -1,0 +1,71 @@
+<%- include('../partials/header') %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-book"></i></span>
+  <div class="flex-grow-1">
+    <h1>Codes tarifaires</h1>
+    <p class="mb-0"><%= total %> code<%= total > 1 ? 's' : '' %> dans le dictionnaire. Chaque code saisi à la validation d'un dossier y est ajouté et sera proposé la prochaine fois.</p>
+  </div>
+  <a class="btn btn-light btn-sm" href="/validation/registre"><i class="bi bi-journal-check me-1"></i>Registre des validations</a>
+</div>
+
+<div class="row g-4">
+  <div class="<%= canEdit ? 'col-lg-8' : 'col-12' %>">
+    <form class="d-flex gap-2 mb-3" method="GET">
+      <input type="search" name="q" class="form-control" placeholder="Chercher un code ou un article (ex. 6309 ou FRIPERIE)" value="<%= q %>" autofocus>
+      <button class="btn btn-primary"><i class="bi bi-search"></i></button>
+    </form>
+    <div class="card">
+      <div class="table-responsive">
+        <table class="table table-sm align-middle mb-0">
+          <thead><tr><th>Code</th><th>Désignation</th><th class="text-end">Utilisé</th><% if (canEdit) { %><th></th><% } %></tr></thead>
+          <tbody>
+            <% if (!codes.length) { %><tr><td colspan="4" class="text-center text-muted py-4"><%= q ? 'Aucun code ne correspond.' : 'Le dictionnaire est vide : ajoutez des codes à droite ou saisissez-les à la validation.' %></td></tr><% } %>
+            <% codes.forEach(c => { %>
+              <tr>
+                <td class="font-monospace fw-bold text-nowrap"><%= c.code %></td>
+                <td><%= c.designation %><% if (c.notes) { %><small class="d-block text-muted"><%= c.notes %></small><% } %></td>
+                <td class="text-end text-muted small"><%= c.usages %> fois</td>
+                <% if (canEdit) { %>
+                  <td class="text-end text-nowrap">
+                    <button class="btn btn-sm btn-link p-0 me-2" type="button" data-bs-toggle="collapse" data-bs-target="#ed<%= c.id %>" aria-label="Modifier"><i class="bi bi-pencil"></i></button>
+                    <form class="d-inline" method="POST" action="/codes-tarifaires/<%= c.id %>/supprimer" onsubmit="return confirm('Retirer le code <%= c.code %> du dictionnaire ?')"><button class="btn btn-sm btn-link text-danger p-0" aria-label="Supprimer"><i class="bi bi-trash"></i></button></form>
+                  </td>
+                <% } %>
+              </tr>
+              <% if (canEdit) { %>
+                <tr class="collapse" id="ed<%= c.id %>"><td colspan="4">
+                  <form method="POST" action="/codes-tarifaires/<%= c.id %>" class="d-flex flex-wrap gap-2 py-1">
+                    <input type="hidden" name="q" value="<%= q %>">
+                    <input name="designation" class="form-control form-control-sm" style="flex: 2 1 14rem" value="<%= c.designation %>" required>
+                    <input name="notes" class="form-control form-control-sm" style="flex: 1 1 10rem" value="<%= c.notes || '' %>" placeholder="Remarque (taux, régime…)">
+                    <button class="btn btn-primary btn-sm">Enregistrer</button>
+                  </form>
+                </td></tr>
+              <% } %>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <% if (canEdit) { %>
+    <div class="col-lg-4">
+      <div class="card mb-4"><div class="card-header"><i class="bi bi-plus-lg me-2"></i>Ajouter un code</div><div class="card-body">
+        <form method="POST" action="/codes-tarifaires" class="d-grid gap-2">
+          <input name="code" class="form-control font-monospace" placeholder="Code (ex. 6309.00.00)" required>
+          <input name="designation" class="form-control" placeholder="Désignation de l'article" required>
+          <input name="notes" class="form-control" placeholder="Remarque (facultatif)">
+          <button class="btn btn-primary">Ajouter</button>
+        </form>
+      </div></div>
+      <div class="card"><div class="card-header"><i class="bi bi-list-columns me-2"></i>Ajouter une liste</div><div class="card-body">
+        <form method="POST" action="/codes-tarifaires" class="d-grid gap-2">
+          <textarea name="liste" rows="7" class="form-control font-monospace small" placeholder="Une ligne par code :&#10;6309.00.00 ; FRIPERIE&#10;8703.23.00 ; VÉHICULES DE TOURISME"></textarea>
+          <small class="text-muted">Collez votre nomenclature : code, puis point-virgule (ou tabulation), puis la désignation. Un code déjà présent est mis à jour.</small>
+          <button class="btn btn-light">Ajouter la liste</button>
+        </form>
+      </div></div>
+    </div>
+  <% } %>
+</div>
+<%- include('../partials/footer') %>

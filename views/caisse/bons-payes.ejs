@@ -1,0 +1,99 @@
+<%- include('../partials/header') %>
+<%
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const modeL = { ESPECES: 'Espèces', CHEQUE: 'Chèque', VIREMENT: 'Virement', MOBILE_MONEY: 'Mobile money' };
+  const nom = (u) => ((u.prenom || '') + ' ' + u.nom).trim();
+  const fmtDay = (s) => new Date(s + 'T00:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const qs = (o) => { const p = Object.assign({ du: du, au: au, q: recherche, manque: manque ? '1' : '' }, o); return '?' + Object.keys(p).filter(k => p[k]).map(k => k + '=' + encodeURIComponent(p[k])).join('&'); };
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-journal-check"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1>Bons payés</h1>
+    <p class="mb-0"><%= jour ? fmtDay(du) : 'Du ' + new Date(du + 'T00:00:00').toLocaleDateString('fr-FR') + ' au ' + new Date(au + 'T00:00:00').toLocaleDateString('fr-FR') %> · classés par façon d'émettre le bon, avec leur reçu</p>
+  </div>
+  <div class="d-flex gap-2 flex-wrap d-print-none">
+    <a class="btn btn-light" href="/caisse/bons-payes<%= qs({ format: 'csv' }) %>"><i class="bi bi-filetype-csv me-1"></i>Excel</a>
+    <button class="btn btn-light" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button>
+  </div>
+</div>
+
+<form class="bp-filters d-print-none" method="GET">
+  <div class="btn-group">
+    <% if (jour) { %><a class="btn btn-light" href="<%= qs({ du: veille, au: veille }) %>" aria-label="Jour précédent"><i class="bi bi-chevron-left"></i></a><% } %>
+    <a class="btn <%= jour && du === aujourdhui ? 'btn-primary' : 'btn-light' %>" href="<%= qs({ du: aujourdhui, au: aujourdhui }) %>">Aujourd'hui</a>
+    <% if (jour) { %><a class="btn btn-light" href="<%= qs({ du: lendemain, au: lendemain }) %>" aria-label="Jour suivant"><i class="bi bi-chevron-right"></i></a><% } %>
+  </div>
+  <a class="btn btn-light" href="<%= qs({ du: debutMois, au: aujourdhui }) %>">Ce mois</a>
+  <label class="bp-f">Du <input type="date" name="du" value="<%= du %>" class="form-control form-control-sm"></label>
+  <label class="bp-f">au <input type="date" name="au" value="<%= au %>" class="form-control form-control-sm"></label>
+  <input type="search" name="q" value="<%= recherche %>" class="form-control form-control-sm bp-q" placeholder="N° bon, reçu, bénéficiaire, dossier…">
+  <label class="form-check bp-f mb-0"><input type="checkbox" class="form-check-input" name="manque" value="1" <%= manque ? 'checked' : '' %>> <span class="form-check-label">Reçu signé à saisir</span></label>
+  <button class="btn btn-sm btn-primary">Afficher</button>
+</form>
+
+<div class="acc-sum">
+  <div><span>Total payé</span><b><%= f(total) %> F</b><small class="d-block text-muted"><%= nb %> bon<%= nb > 1 ? 's' : '' %></small></div>
+  <% groupes.forEach(g => { %>
+    <a class="bp-tile" href="#g-<%= g.key %>"><span><i class="bi <%= g.icon %> me-1"></i><%= g.label %></span><b><%= f(g.total) %> F</b><small class="d-block text-muted"><%= g.rows.length %> bon<%= g.rows.length > 1 ? 's' : '' %></small></a>
+  <% }) %>
+  <div class="<%= aSaisir ? 'bp-warn' : '' %>"><span>Reçus signés à saisir</span><b><%= aSaisir %></b><small class="d-block text-muted"><%= aSaisir ? 'N° du reçu papier manquant' : 'Tout est saisi' %></small></div>
+</div>
+
+<% if (!nb) { %>
+  <div class="card"><div class="card-body text-center text-muted py-5"><i class="bi bi-inbox fs-2 d-block mb-2"></i>Aucun bon payé sur cette période<%= manque || recherche ? ' avec ces filtres' : '' %>.</div></div>
+<% } %>
+
+<% groupes.filter(g => g.rows.length).forEach(g => { %>
+  <section class="card mb-3 bp-group" id="g-<%= g.key %>">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+      <div><b><i class="bi <%= g.icon %> me-1"></i><%= g.label %></b> <small class="text-muted ms-1"><%= g.aide %></small></div>
+      <div class="fw-bold"><%= g.rows.length %> · <%= f(g.total) %> F</div>
+    </div>
+    <% if (g.sous.length > 1) { %>
+      <div class="px-3 pt-2 d-flex flex-wrap gap-2"><% g.sous.forEach(s => { %><span class="badge text-bg-light border"><%= s[0] %> · <%= f(s[1]) %> F</span><% }) %></div>
+    <% } %>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0 bp-table">
+        <thead><tr>
+          <th><%= jour ? 'Heure' : 'Date' %></th><th>Bon</th><th>Bénéficiaire</th><th>Objet</th>
+          <th><%= g.key === 'INTERNE' ? 'Catégorie' : 'Dossier' %></th><th>Mode</th><th class="text-end">Montant</th><th>Reçu</th><th>Justifié</th>
+        </tr></thead>
+        <tbody>
+        <% g.rows.forEach(l => { %>
+          <tr>
+            <td class="text-nowrap"><%= jour ? new Date(l.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : new Date(l.date).toLocaleDateString('fr-FR') %></td>
+            <td class="text-nowrap"><a href="/bons/<%= l.id %>"><%= l.numero %></a><% if (l.ordre_paiement_by) { %> <span class="badge text-bg-warning" title="Payé sur ordre de <%= l.ordre_paiement_by %>">ordre</span><% } %></td>
+            <td><%= nom(l.demandeur) %><small class="d-block text-muted"><%= l.service %></small></td>
+            <td class="bp-obj"><%= l.objet %></td>
+            <td class="bp-dos"><% if (g.key === 'INTERNE') { %><%= l.sousCat %><% } else if (l.dossier) { %><a class="text-nowrap" href="/dossiers/<%= l.dossier.id %>"><%= l.dossier.numero_ordre || l.dossier.numero %></a><small class="d-block text-muted bp-cli" title="<%= l.dossier.client ? l.dossier.client.nom : '' %>"><%= l.dossier.client ? l.dossier.client.nom : '' %></small><% } else { %>—<% } %></td>
+            <td class="text-nowrap"><%= modeL[l.mode] || l.mode %><% if (l.reference) { %><small class="d-block text-muted"><%= l.reference %></small><% } %></td>
+            <td class="text-end fw-semibold text-nowrap"><%= f(l.montant_demande) %></td>
+            <td class="text-nowrap">
+              <a href="/bons/<%= l.id %>/recu" title="Reçu de caisse"><i class="bi bi-receipt me-1"></i><%= l.recu_numero || 'Reçu' %></a>
+              <% if (l.signe) { %>
+                <small class="d-block text-success"><i class="bi bi-check2-circle"></i> <%= l.recu_papier ? 'N° ' + l.recu_papier : 'photo' %><% if (l.recu_scan) { %> · <a href="/bons/<%= l.id %>/recu/scan" target="_blank">photo</a><% } %></small>
+              <% } else if (canWrite) { %>
+                <form method="POST" action="/bons/<%= l.id %>/recu" class="bp-recu d-print-none" enctype="multipart/form-data">
+                  <input type="hidden" name="back" value="/caisse/bons-payes<%= qs({}) %>#g-<%= g.key %>">
+                  <input name="recu_papier" class="form-control form-control-sm" placeholder="N° reçu signé" maxlength="60" required>
+                  <button class="btn btn-sm btn-outline-success" title="Enregistrer"><i class="bi bi-check-lg"></i></button>
+                </form>
+              <% } else { %>
+                <small class="d-block text-warning-emphasis">signé : à saisir</small>
+              <% } %>
+            </td>
+            <td class="text-nowrap"><% if (l.bon_parent_id || l.bon_reel) { %><span class="text-success"><i class="bi bi-check2"></i> <%= l.bon_reel ? f(l.bon_reel.montant_reel) + ' F' : 'complément' %></span><% } else { %><span class="text-muted">en attente</span><% } %></td>
+          </tr>
+        <% }) %>
+        </tbody>
+        <tfoot><tr><th colspan="6">Total <%= g.label.toLowerCase() %></th><th class="text-end"><%= f(g.total) %></th><th colspan="2"></th></tr></tfoot>
+      </table>
+    </div>
+  </section>
+<% }) %>
+
+<% if (nb) { %>
+  <div class="card bp-total"><div class="card-body d-flex justify-content-between fw-bold"><span>Total des bons payés</span><span><%= f(total) %> F</span></div></div>
+<% } %>
+<%- include('../partials/footer') %>

@@ -1,0 +1,112 @@
+<%- include('../partials/header') %>
+<% const f = (n) => Math.round(n || 0).toLocaleString('fr-FR'); %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-wallet2"></i></span>
+  <div class="flex-grow-1">
+    <h1>Dépenses internes</h1>
+    <p class="mb-0">Achat de matériel, facture, prestation : faites une demande, elle est visée par le DAF puis le PDG, et par l'audit ; le DG est informé. Elle est ensuite payée par la caisse.</p>
+  </div>
+  <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#deboursModal"><i class="bi bi-folder-plus me-1"></i>Débours sur un dossier</button>
+  <% if (seeAll) { %>
+    <div class="view-toggle"><a href="/depenses" class="<%= !tous ? 'on' : '' %>">Mes demandes</a><a href="/depenses?tous=1" class="<%= tous ? 'on' : '' %>">Toutes</a></div>
+  <% } %>
+</div>
+
+<div class="row g-4">
+  <div class="col-xl-5">
+    <div class="card">
+      <div class="card-header"><i class="bi bi-plus-circle me-2" style="color:var(--accent)"></i>Nouvelle demande</div>
+      <div class="card-body">
+        <form action="/depenses" method="POST" enctype="multipart/form-data" data-lines-form>
+          <input type="hidden" name="items_json" value="[]" data-items-json>
+          <input type="hidden" name="montant_demande" value="0" data-total-input>
+          <div class="row g-2 ops-form mb-2">
+            <div class="col-sm-6"><label class="form-label">Catégorie</label>
+              <select name="categorie" class="form-select form-select-sm"><% DEPENSE_CATEGORIES.forEach(c => { %><option value="<%= c.key %>" <%= prefill && prefill.categorie === c.key ? 'selected' : '' %>><%= c.label %></option><% }) %></select></div>
+            <div class="col-sm-6"><label class="form-label">Service</label>
+              <select name="departement_id" class="form-select form-select-sm"><% services.forEach(s => { %><option value="<%= s.id %>" <%= (prefill && prefill.departement_id ? prefill.departement_id : monService) === s.id ? 'selected' : '' %>><%= s.nom %></option><% }) %></select></div>
+            <div class="col-12"><label class="form-label">Objet <span class="text-danger">*</span></label><input name="objet" class="form-control form-control-sm" placeholder="ex. Ordinateur portable pour la facturation" required value="<%= prefill ? prefill.objet : '' %>"></div>
+            <div class="col-12"><%- include('../partials/_urgence') %></div>
+          </div>
+          <table class="table table-sm align-middle mb-1 lines-table">
+            <thead><tr><th>Désignation</th><th class="text-end" style="width:8.5rem">Montant (F)</th><th style="width:2rem"></th></tr></thead>
+            <tbody><tr data-line><td><input class="form-control form-control-sm" data-des placeholder="ex. HP ProBook" required value="<%= prefill ? prefill.designation : '' %>"></td><td><input type="number" min="0" class="form-control form-control-sm text-end" data-amt required value="<%= prefill ? prefill.montant : '' %>"></td><td><button type="button" class="btn btn-sm btn-link text-danger p-0" data-del aria-label="Supprimer"><i class="bi bi-trash"></i></button></td></tr></tbody>
+            <tfoot><tr class="fw-bold"><td class="text-end">Total</td><td class="text-end"><span data-total>0</span> F</td><td></td></tr></tfoot>
+          </table>
+          <button type="button" class="btn btn-light btn-sm mb-3" data-add><i class="bi bi-plus-lg me-1"></i>Ajouter une ligne</button>
+          <div class="mb-3"><label class="form-label small">Devis, proforma ou facture (facultatif)</label><input type="file" name="pieces" class="form-control form-control-sm" accept=".pdf,image/*" multiple></div>
+          <button class="btn btn-primary w-100"><i class="bi bi-send me-1"></i>Envoyer la demande</button>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div class="col-xl-7">
+    <div class="card">
+      <div class="card-header"><%= tous ? 'Toutes les demandes' : 'Mes demandes' %> <span class="badge bg-primary-subtle text-primary-emphasis ms-1"><%= bons.length %></span></div>
+      <div class="list-group list-group-flush">
+        <% bons.forEach(b => { const p = visaProgress(b);
+             const st = b.etat === 'REJETE' ? ['Rejetée', 'danger'] : b.etat === 'A_MODIFIER' ? ['À modifier', 'warning'] : b.etat === 'EN_ATTENTE' ? (b.ordre_paiement_by || !p.missing.length ? ['Prête à payer', 'success'] : [`Visas ${p.count}/${p.total}`, 'warning'])
+                      : !b.bon_reel ? ['Payée · à justifier', 'primary'] : !b.bon_reel.confirme_at ? ['Justifiée', 'info'] : ['Terminée', 'secondary']; %>
+          <a href="/bons/<%= b.id %>" class="list-group-item list-group-item-action d-flex align-items-center gap-3">
+            <span class="flex-grow-1 min-w-0">
+              <b class="small"><%= b.numero %></b><% if (b.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %> <span class="small text-muted">· <%= categorieLabel(b.categorie) %></span>
+              <span class="d-block small text-truncate"><%= b.objet %><%= tous ? ' · ' + [b.demandeur.prenom, b.demandeur.nom].filter(Boolean).join(' ') : '' %></span>
+            </span>
+            <span class="badge text-bg-<%= st[1] %>"><%= st[0] %></span>
+            <b class="text-nowrap"><%= f(b.montant_demande) %> F</b>
+          </a>
+        <% }) %>
+        <% if (!bons.length) { %><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-wallet2"></i></div>Aucune demande pour le moment.</div><% } %>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Débours : choisir un dossier ouvert, puis émettre un bon qui entre dans les dépenses de ce dossier -->
+<div class="modal fade" id="deboursModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+    <div class="modal-content cx-modal">
+      <div class="modal-header"><h5 class="modal-title" id="dbTitle">Débours sur un dossier</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+      <div class="modal-body">
+        <div id="dbStep1">
+          <input type="search" id="dbSearch" class="form-control mb-2" placeholder="Rechercher : client, BL, N° de dossier…" autocomplete="off">
+          <div class="small text-muted mb-2">Dossiers ouverts, les plus récents d'abord. Le bon entre dans les dépenses du dossier et suit les visas.</div>
+          <div class="list-group" id="dbList">
+            <% if (!dossiersOuverts.length) { %><div class="text-muted text-center py-4">Aucun dossier ouvert.</div><% } %>
+            <% dossiersOuverts.forEach(d => { %>
+              <button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center gap-2 db-item" data-id="<%= d.id %>" data-label="<%= (d.client ? d.client.nom : '') + ' · BL ' + (d.bl || '—') %>" data-q="<%= [d.numero, d.numero_ordre, d.client && d.client.nom, d.bl, d.contenu].filter(Boolean).join(' ').toLowerCase() %>">
+                <span class="min-w-0"><b><%= d.client ? d.client.nom : d.numero %></b><small class="d-block text-muted text-truncate"><%= d.numero_ordre ? 'N° ' + d.numero_ordre + ' · ' : 'Nouveau dossier · ' %>BL <%= d.bl || '—' %><%= d.contenu ? ' · ' + d.contenu : '' %></small></span>
+                <span class="badge text-bg-light text-nowrap"><%= STEP_LABELS[d.pipeline_status] || d.pipeline_status %></span>
+              </button>
+            <% }) %>
+          </div>
+        </div>
+        <div id="dbStep2" hidden>
+          <button type="button" class="btn btn-link btn-sm px-0 mb-2" id="dbBack"><i class="bi bi-arrow-left me-1"></i>Changer de dossier</button>
+          <%- include('../dossiers/_bp_form', { dossier: { id: '' } }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  (function () {
+    var m = document.getElementById('deboursModal'); if (!m) return;
+    var s1 = document.getElementById('dbStep1'), s2 = document.getElementById('dbStep2'), t = document.getElementById('dbTitle');
+    var form = s2.querySelector('form');
+    var r = document.createElement('input'); r.type = 'hidden'; r.name = 'retour'; r.value = 'bon'; form.appendChild(r);
+    var o = document.createElement('input'); o.type = 'hidden'; o.name = 'origine'; o.value = 'DEBOURS'; form.appendChild(o);
+    document.getElementById('dbSearch').addEventListener('input', function () {
+      var q = this.value.trim().toLowerCase();
+      m.querySelectorAll('.db-item').forEach(function (b) { b.hidden = q && b.dataset.q.indexOf(q) < 0; });
+    });
+    m.querySelectorAll('.db-item').forEach(function (b) {
+      b.addEventListener('click', function () {
+        form.querySelector('[name="dossier_id"]').value = b.dataset.id;
+        t.textContent = 'Débours · ' + b.dataset.label; s1.hidden = true; s2.hidden = false;
+      });
+    });
+    document.getElementById('dbBack').addEventListener('click', function () { s1.hidden = false; s2.hidden = true; t.textContent = 'Débours sur un dossier'; });
+  })();
+</script>
+<%- include('../partials/footer') %>

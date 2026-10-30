@@ -1,0 +1,41 @@
+<%- include('../partials/header') %>
+<% const F = (n) => Math.round(n || 0).toLocaleString('fr-FR'); %>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-receipt"></i></span>
+  <div class="flex-grow-1">
+    <h1>Mes bulletins</h1>
+    <p class="mb-0">Vos bulletins de paie et vos congés.</p>
+  </div>
+  <a class="btn btn-primary btn-sm" href="/demandes/nouvelle/conge"><i class="bi bi-calendar2-plus me-1"></i>Demander un congé</a>
+</div>
+<% if (!e) { %>
+  <div class="empty-state py-5"><div class="es-ico"><i class="bi bi-person-vcard"></i></div><b>Pas de dossier du personnel relié à votre compte</b><p class="small text-muted mb-0">Demandez aux ressources humaines de le relier.</p></div>
+<% } else { %>
+  <div class="row g-4">
+    <div class="col-lg-4">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-calendar2-week me-2"></i>Mes congés payés</div>
+        <div class="card-body">
+          <div class="rh-conges">
+            <div><b><%= String(conges.acquis).replace('.', ',') %></b><span>acquis</span></div>
+            <div><b><%= String(conges.pris).replace('.', ',') %></b><span>pris</span></div>
+            <div class="<%= conges.solde < 0 ? 'neg' : '' %>"><b><%= String(conges.solde).replace('.', ',') %></b><span>restants</span></div>
+          </div>
+          <p class="small text-muted mt-2 mb-0">1,5 jour par mois de service. Les congés annuels approuvés sont déduits.</p>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-8">
+      <div class="card">
+        <div class="card-header"><i class="bi bi-receipt me-2"></i>Bulletins</div>
+        <div class="card-body p-0">
+          <% if (!bulletins.length) { %><div class="p-3 text-muted small">Aucun bulletin pour l'instant.</div><% } %>
+          <% bulletins.forEach(b => { %>
+            <a class="rh-row" href="/rh/bulletins/<%= b.id %>" target="_blank"><span><i class="bi bi-file-earmark-text me-2"></i><%= periodeLabel(b.periode) %></span><span class="badge text-bg-<%= b.periode.statut === 'PAYEE' ? 'success' : 'primary' %>"><%= b.periode.statut === 'PAYEE' ? 'Payé' : 'Validé' %></span><b><%= F(b.net) %> F</b></a>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+<% } %>
+<%- include('../partials/footer') %>

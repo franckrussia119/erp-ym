@@ -1,0 +1,93 @@
+<%
+  // Carte d'un bon provisoire en attente : visas en direct, ordre de paiement, actions selon le rôle.
+  // Paramètres : b, myKey ('pdg'…, '*' pour l'admin, null), isCaisse, canOrder, canReject, holders {visaKey: "Nom, Nom"}
+  const VK = [['pdg','PDG'],['dg','DG'],['dga','DGA'],['daf','DAF'],['audit','Audit']];
+  const req = VK.filter(([k]) => b['tick_' + k + '_by'] !== 'Non requis');
+  const done = req.filter(([k]) => b['tick_' + k]).length;
+  const allOk = done === req.length;
+  const payOk = allOk || !!b.ordre_paiement_by;
+  const missing = req.filter(([k]) => !b['tick_' + k]);
+  const signedByMe = myKey && myKey !== '*' && b['tick_' + myKey] && b['tick_' + myKey + '_by'] !== 'Non requis';
+  // Bon interne : le PDG vise après le DAF
+  const attendDaf = (b.type === 'INTERNE') && myKey === 'pdg' && !b.tick_daf;
+  const myTurn = myKey && myKey !== '*' && req.some(([k]) => k === myKey) && !b['tick_' + myKey] && !attendDaf;
+  const ago = (d) => { const h = Math.round((Date.now() - new Date(d).getTime()) / 36e5); return h < 1 ? "à l'instant" : h < 48 ? `il y a ${h} h` : `il y a ${Math.round(h / 24)} j`; };
+  const interne = b.type === 'INTERNE' || !b.dossier;
+%>
+<%
+  const emetteur = [b.demandeur.prenom, b.demandeur.nom].filter(Boolean).join(' ');
+  let details = []; try { details = JSON.parse(b.items_json || '[]'); } catch (e) { details = []; }
+  if (!Array.isArray(details)) details = [];
+  const F = (n) => Math.round(Number(n) || 0).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ');
+%>
+<article class="visa-card <%= signedByMe ? 'signed' : '' %> <%= payOk ? 'ready' : '' %> <%= b.urgent ? 'urgent' : '' %>" id="bon-<%= b.id %>">
+  <div class="vc-top">
+    <div class="min-w-0">
+      <div class="vc-who"><% if (b.urgent) { %><span class="badge-urgent me-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %><%= emetteur %><small><%= b.service %></small></div>
+      <% if (interne) { %>
+        <div class="vc-facts"><span><b>Raison</b><%= b.objet %></span></div>
+        <% if (details.length) { %>
+          <ul class="vc-details"><% details.forEach(it => { %><li><span><%= it.designation %></span><span><%= F(it.montant) %> F</span></li><% }) %></ul>
+        <% } %>
+      <% } else { %>
+        <div class="vc-facts">
+          <span><b>Client</b><%= b.dossier.client ? b.dossier.client.nom : '—' %></span>
+          <span><b>BL</b><%= b.dossier.bl || '—' %></span>
+          <span><b>Marchandise</b><%= b.dossier.contenu || '—' %></span>
+        </div>
+        <div class="vc-obj"><%= b.objet %></div>
+      <% } %>
+      <div class="vc-ref"><a href="/bons/<%= b.id %>"><%= b.numero %></a> · <% if (interne) { %>dépense interne<% } else { %>dossier <a href="/dossiers/<%= b.dossier.id %>"><%= b.dossier.numero %></a><% } %> · <%= ago(b.created_at) %></div>
+    </div>
+    <div class="vc-amount"><%= F(b.montant_demande) %><small> F</small></div>
+  </div>
+  <div class="vc-visas">
+    <% VK.forEach(([k, l]) => { const nr = b['tick_' + k + '_by'] === 'Non requis'; %>
+      <span class="vv <%= nr ? 'nr' : b['tick_' + k] ? 'on' : '' %> <%= myKey === k ? 'me' : '' %>" title="<%= nr ? 'Non requis' : b['tick_' + k] ? 'Visé par ' + b['tick_' + k + '_by'] : 'En attente' + (holders && holders[k] ? ' · ' + holders[k] : '') %>"><i class="bi <%= nr ? 'bi-slash-circle' : b['tick_' + k] ? 'bi-check-lg' : 'bi-hourglass' %>"></i><%= l %></span>
+    <% }) %>
+    <span class="vv-count"><%= done %>/<%= req.length %></span>
+  </div>
+  <% if (b.ordre_paiement_by) { %>
+    <div class="vc-order"><i class="bi bi-megaphone-fill me-1"></i>Ordre de paiement de <b><%= b.ordre_paiement_by %></b><%= b.ordre_paiement_at ? ' · ' + new Date(b.ordre_paiement_at).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' %></div>
+  <% } else if (missing.length && (isCaisse || canOrder)) { %>
+    <div class="vc-wait"><i class="bi bi-telephone me-1"></i>Attend : <% missing.forEach(([k, l], i) => { %><b><%= l %></b><%= holders && holders[k] ? ' (' + holders[k] + ')' : '' %><%= i < missing.length - 1 ? ', ' : '' %><% }) %></div>
+  <% } %>
+  <div class="vc-actions">
+    <% if (isCaisse) { %>
+      <% if (payOk) { %>
+        <button class="btn btn-success flex-grow-1" data-act="approve" data-id="<%= b.id %>" data-num="<%= b.numero %>" data-montant="<%= Math.round(b.montant_demande).toLocaleString('fr-FR') %>"><i class="bi bi-cash-coin me-1"></i>Payer <%= b.ordre_paiement_by && !allOk ? 'sur ordre' : '' %></button>
+      <% } else { %>
+        <button class="btn btn-light flex-grow-1" disabled><i class="bi bi-hourglass-split me-1"></i>Visas en cours (<%= done %>/<%= req.length %>)</button>
+      <% } %>
+    <% } %>
+    <% if (myKey === '*') { %>
+      <% missing.forEach(([k, l]) => { %>
+        <button class="btn btn-light btn-sm" data-act="tick" data-key="<%= k %>" data-id="<%= b.id %>">Viser <%= l %></button>
+      <% }) %>
+    <% } else if (myTurn) { %>
+      <button class="btn btn-primary flex-grow-1 btn-visa" data-act="tick" data-key="<%= myKey %>" data-id="<%= b.id %>"><i class="bi bi-pen me-1"></i>Viser ce bon</button>
+    <% } else if (attendDaf) { %>
+      <span class="vc-signed flex-grow-1 text-muted"><i class="bi bi-hourglass-split"></i>Après le visa du DAF</span>
+    <% } else if (signedByMe) { %>
+      <span class="vc-signed flex-grow-1"><i class="bi bi-check-circle-fill"></i>Vous avez visé</span>
+      <button class="btn btn-link btn-sm text-muted" data-act="tick" data-key="<%= myKey %>" data-id="<%= b.id %>">Retirer</button>
+    <% } %>
+    <% if (canOrder && !allOk) { %>
+      <% if (b.ordre_paiement_by) { %>
+        <button class="btn btn-outline-secondary btn-sm" data-act="order-cancel" data-id="<%= b.id %>">Annuler l'ordre</button>
+      <% } else { %>
+        <button class="btn btn-outline-warning btn-sm" data-act="order" data-id="<%= b.id %>" data-num="<%= b.numero %>"><i class="bi bi-megaphone me-1"></i>Ordonner le paiement</button>
+      <% } %>
+    <% } %>
+    <% if (canReject) { %>
+      <div class="dropdown">
+        <button class="btn btn-outline-danger btn-sm dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-x-lg"></i><span class="d-none d-sm-inline ms-1">Rejeter</span></button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li><button class="dropdown-item" data-act="reject" data-type="MODIFICATION" data-id="<%= b.id %>" data-num="<%= b.numero %>"><i class="bi bi-pencil me-2 text-warning"></i>Rejet pour modification<small class="d-block text-muted">Le demandeur corrige le montant et renvoie</small></button></li>
+          <li><button class="dropdown-item" data-act="reject" data-type="DEFINITIF" data-id="<%= b.id %>" data-num="<%= b.numero %>"><i class="bi bi-x-octagon me-2 text-danger"></i>Rejet définitif<small class="d-block text-muted">Le bon est clos</small></button></li>
+        </ul>
+      </div>
+    <% } %>
+    <a class="btn btn-light btn-sm" href="/bons/<%= b.id %>/pdf" target="_blank" title="Voir le bon"><i class="bi bi-file-earmark-pdf"></i></a>
+  </div>
+</article>

@@ -1,0 +1,324 @@
+<%- include('../partials/header') %>
+
+<div class="row mb-4 align-items-center">
+  <div class="col-sm-6">
+    <h1 class="h3 text-slate-800"><i class="bi bi-people-fill text-primary me-2"></i>Annuaire des Tiers (Clients & Représentants)</h1>
+    <p class="text-muted mb-0">Gestion de l'annuaire des clients et des représentants mandataires de l'ERP.</p>
+  </div>
+  <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+    <a href="/representants/create" class="btn btn-outline-primary d-inline-flex align-items-center me-2">
+      <i class="bi bi-person-badge-fill me-2"></i> Enregistrer un Représentant
+    </a>
+    <button class="btn btn-primary d-inline-flex align-items-center" data-bs-toggle="modal" data-bs-target="#newClientModal">
+      <i class="bi bi-person-plus-fill me-2"></i> Enregistrer un Client
+    </button>
+  </div>
+</div>
+
+<ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded shadow-sm border" id="tiersTabs" role="tablist">
+  <li class="nav-item" role="presentation">
+    <button class="nav-link active fw-bold text-slate-700 d-flex align-items-center" id="clients-tab" data-bs-toggle="tab" data-bs-target="#clients-pane" type="button" role="tab" aria-controls="clients-pane" aria-selected="true" style="border-radius: 6px;">
+      <i class="bi bi-building-fill me-2 text-primary"></i> Clients Importateurs / Exportateurs
+      <span class="badge bg-primary text-white ms-2"><%= clients.length %></span>
+    </button>
+  </li>
+  <li class="nav-item" role="presentation">
+    <button class="nav-link fw-bold text-slate-700 d-flex align-items-center" id="reps-tab" data-bs-toggle="tab" data-bs-target="#reps-pane" type="button" role="tab" aria-controls="reps-pane" aria-selected="false" style="border-radius: 6px;">
+      <i class="bi bi-person-badge-fill me-2 text-primary"></i> Représentants Mandataires
+      <span class="badge bg-secondary text-white ms-2"><%= reps.length %></span>
+    </button>
+  </li>
+</ul>
+
+<div class="tab-content" id="tiersTabsContent">
+  <!-- Clients Tab Pane -->
+  <div class="tab-pane fade show active" id="clients-pane" role="tabpanel" aria-labelledby="clients-tab">
+
+<!-- Clients List Card -->
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">ID</th>
+            <th>Nom Complet & Raison Sociale</th>
+            <th>N.I.U (Identifiant Unique)</th>
+            <th>R.C.C.M (Commerce)</th>
+            <th>Téléphone</th>
+            <th>Adresse</th>
+            <th>Dossiers gérés</th>
+            <th class="text-end pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (clients && clients.length > 0) { %>
+            <% clients.forEach(cl => { %>
+              <tr>
+                <td class="ps-4 text-muted font-monospace">CLI-<%= cl.id %></td>
+                <td>
+                  <div class="fw-bold text-dark"><%= cl.nom %></div>
+                  <small class="text-muted">Partenaire de : <%= cl.societe %></small>
+                </td>
+                <td>
+                  <span class="font-monospace text-xs badge bg-light text-dark fw-bold border" style="color: #000000 !important;"><%= cl.niu || 'NON FOURNI' %></span>
+                </td>
+                <td>
+                  <span class="font-monospace text-xs text-muted"><%= cl.rccm || 'Non renseigné' %></span>
+                </td>
+                <td>
+                  <a href="tel:<%= cl.tel %>" class="text-secondary text-decoration-none"><i class="bi bi-telephone text-muted me-1"></i> <%= cl.tel || 'N/A' %></a>
+                </td>
+                <td>
+                  <span class="text-slate-600 truncate" title="<%= cl.adresse %>"><%= cl.adresse || 'N/A' %></span>
+                </td>
+                <td>
+                  <span class="badge bg-primary-subtle text-primary rounded-pill px-3"><%= cl._count && typeof cl._count.dossiers !== 'undefined' ? cl._count.dossiers : 0 %> dossiers</span>
+                </td>
+                <td class="text-end pe-4">
+                  <div class="btn-group">
+                    <button class="btn btn-light btn-sm text-primary rounded-circle me-1" data-bs-toggle="modal" data-bs-target="#editClientModal<%= cl.id %>" title="Modifier">
+                      <i class="bi bi-pencil-square"></i>
+                    </button>
+                    <!-- Delete form -->
+                    <form action="/clients/delete/<%= cl.id %>" method="POST" class="d-inline" onsubmit="return confirm('Êtes-vous sûr de vouloir supprimer ce client ? Tous ses dossiers et factures associés seront supprimés.');">
+                      <button type="submit" class="btn btn-light btn-sm text-danger rounded-circle">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+
+              <!-- Edit Client Modal -->
+              <div class="modal fade" id="editClientModal<%= cl.id %>" tabindex="-1" aria-labelledby="editClientModalLabel<%= cl.id %>" aria-hidden="true">
+                <div class="modal-dialog">
+                  <div class="modal-content">
+                    <div class="modal-header">
+                      <h5 class="modal-title fw-bold" id="editClientModalLabel<%= cl.id %>">Modifier l'importateur / exportateur</h5>
+                      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <form action="/clients/update/<%= cl.id %>" method="POST">
+                      <div class="modal-body text-start">
+                        <div class="mb-3">
+                          <label class="form-label small fw-bold">Nom / Raison Sociale <span class="text-danger">*</span></label>
+                          <input type="text" class="form-control" name="nom" value="<%= cl.nom %>" required>
+                        </div>
+                        <div class="row mb-3">
+                          <div class="col-md-6">
+                            <label class="form-label small fw-bold">N.I.U (Sénégal/Cameroun) <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" name="niu" value="<%= cl.niu %>" placeholder="M000000000000X">
+                          </div>
+                          <div class="col-md-6">
+                            <label class="form-label small fw-bold">R.C.C.M</label>
+                            <input type="text" class="form-control" name="rccm" value="<%= cl.rccm %>" placeholder="RC/DLA/...">
+                          </div>
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label small fw-bold">N° Téléphone</label>
+                          <input type="text" class="form-control" name="tel" value="<%= cl.tel %>" placeholder="+237 ...">
+                        </div>
+                        <div class="mb-3">
+                          <label class="form-label small fw-bold">Adresse Géographique</label>
+                          <input type="text" class="form-control" name="adresse" value="<%= cl.adresse %>" placeholder="Bassa, Douala...">
+                        </div>
+                      </div>
+                      <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                        <button type="submit" class="btn btn-primary btn-sm">Sauvegarder les modifications</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="8" class="text-center text-muted py-5">
+                <i class="bi bi-people display-4 text-slate-300 d-block mb-3"></i>
+                Aucun importateur ou exportateur enregistré pour l'instant.
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+  </div> <!-- End of clients-pane -->
+
+  <!-- Representatives Tab Pane -->
+  <div class="tab-pane fade" id="reps-pane" role="tabpanel" aria-labelledby="reps-tab">
+    <div class="card border-0 shadow-sm">
+      <div class="card-body p-0">
+        <div class="table-responsive">
+          <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+            <thead class="table-light">
+              <tr>
+                <th class="ps-4">ID</th>
+                <th>Nom Complet</th>
+                <th>Fonction / Rôle</th>
+                <th>Contact</th>
+                <th>Clients Associés</th>
+                <th class="text-center">Pièces Jointes</th>
+                <th class="text-end pe-4">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              <% if (reps && reps.length > 0) { %>
+                <% reps.forEach(rep => { %>
+                  <tr id="rep-row-<%= rep.id %>">
+                    <td class="ps-4 text-muted font-monospace">REP-<%= rep.id %></td>
+                    <td>
+                      <div class="fw-bold text-dark"><%= rep.nom %> <%= rep.prenom || "" %></div>
+                      <span id="badge-<%= rep.id %>" class="badge <%= rep.actif ? 'bg-success' : 'bg-secondary' %>">
+                        <%= rep.actif ? 'Actif' : 'Inactif' %>
+                      </span>
+                    </td>
+                    <td>
+                      <span class="text-secondary"><%= rep.fonction || 'Non renseignée' %></span>
+                    </td>
+                    <td>
+                      <div>
+                        <a href="tel:<%= rep.tel %>" class="text-decoration-none text-secondary"><i class="bi bi-telephone me-1 text-muted"></i><%= rep.tel || 'N/A' %></a>
+                      </div>
+                      <% if (rep.email) { %>
+                        <small class="text-muted"><i class="bi bi-envelope me-1"></i><%= rep.email %></small>
+                      <% } %>
+                    </td>
+                    <td>
+                      <div class="d-flex flex-wrap gap-1" style="max-width: 250px;">
+                        <% if (rep.client_representants && rep.client_representants.length > 0) { %>
+                          <% rep.client_representants.forEach(cr => { %>
+                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="<%= cr.client.nom %>">
+                              <%= cr.client.nom.length > 18 ? cr.client.nom.substring(0, 15) + '...' : cr.client.nom %>
+                            </span>
+                          <% }) %>
+                        <% } else { %>
+                          <span class="text-muted italic small">Aucun client lié</span>
+                        <% } %>
+                      </div>
+                    </td>
+                    <td class="text-center">
+                      <div class="d-flex justify-content-center gap-2">
+                        <% const hasCni = rep.documents && rep.documents.some(d => d.category === 'CNI_REP'); %>
+                        <% const hasProcu = rep.documents && rep.documents.some(d => d.category === 'PROCU_REP'); %>
+                        
+                        <span class="badge <%= hasCni ? 'bg-success' : 'bg-light text-muted border' %> d-inline-flex align-items-center" title="Carte Nationale d'Identité">
+                          <i class="bi <%= hasCni ? 'bi-check-circle-fill' : 'bi-dash-circle' %> me-1"></i> CNI
+                        </span>
+                        <span class="badge <%= hasProcu ? 'bg-success' : 'bg-light text-muted border' %> d-inline-flex align-items-center" title="Procuration / Mandat de Transit">
+                          <i class="bi <%= hasProcu ? 'bi-check-circle-fill' : 'bi-dash-circle' %> me-1"></i> Mandat
+                        </span>
+                      </div>
+                    </td>
+                    <td class="text-end pe-4">
+                      <div class="btn-group">
+                        <a href="/representants/<%= rep.id %>" class="btn btn-light btn-sm text-primary rounded-circle me-1" title="Voir détails">
+                          <i class="bi bi-eye-fill"></i>
+                        </a>
+                        <a href="/representants/<%= rep.id %>/edit" class="btn btn-light btn-sm text-secondary rounded-circle me-1" title="Modifier">
+                          <i class="bi bi-pencil-square"></i>
+                        </a>
+                        <button onclick="toggleRepStatus(<%= rep.id %>)" class="btn btn-light btn-sm text-warning rounded-circle" title="Activer/Désactiver">
+                          <i class="bi bi-toggle2-on"></i>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                <% }) %>
+              <% } else { %>
+                <tr>
+                  <td colspan="7" class="text-center py-5 text-muted">
+                    <i class="bi bi-person-badge-fill display-4 d-block mb-3 text-secondary"></i>
+                    <p class="mb-0">Aucun représentant enregistré ou actif pour le moment.</p>
+                    <a href="/representants/create" class="btn btn-sm btn-primary mt-3">Créer le premier représentant</a>
+                  </td>
+                </tr>
+              <% } %>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div> <!-- End of reps-pane -->
+</div> <!-- End of tab-content -->
+
+<script>
+function toggleRepStatus(id) {
+  fetch(`/representants/${id}/toggle`, {
+    method: 'PATCH',
+    headers: {
+      'Content-Type': 'application/json'
+    }
+  })
+  .then(res => res.json())
+  .then(data => {
+    if (data.ok) {
+      const badge = document.getElementById(`badge-${id}`);
+      if (badge) {
+        if (data.actif) {
+          badge.className = 'badge bg-success';
+          badge.textContent = 'Actif';
+        } else {
+          badge.className = 'badge bg-secondary';
+          badge.textContent = 'Inactif';
+        }
+      }
+    } else {
+      alert("Erreur: " + (data.error || "Impossible de changer le statut."));
+    }
+  })
+  .catch(err => {
+    console.error(err);
+    alert("Erreur réseau ou serveur lors du changement de statut.");
+  });
+}
+</script>
+
+<!-- New Client Modal -->
+<div class="modal fade" id="newClientModal" tabindex="-1" aria-labelledby="newClientModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content shadow border-0">
+      <div class="modal-header bg-slate-900 text-white">
+        <h5 class="modal-title fw-bold text-white" id="newClientModalLabel">Nouveau Client Importateur / Exportateur</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form action="/clients/new" method="POST">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Raison Sociale Complet <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" name="nom" placeholder="Ex: Sodecoton S.A." required>
+          </div>
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">N.I.U (Numéro Fiscal Unique)</label>
+              <input type="text" class="form-control" name="niu" placeholder="M0123456789X">
+              <div class="form-text" style="font-size: 0.70rem;">Lettre fiscale finale obligatoire.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold">R.C.C.M (Tribunal)</label>
+              <input type="text" class="form-control" name="rccm" placeholder="RC/DLA/2014/B/...">
+            </div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">N° Téléphone</label>
+            <input type="text" class="form-control" name="tel" placeholder="Ex: +237 6xx xx xx xx">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Adresse Géographique Cameroun</label>
+            <textarea class="form-control" name="adresse" rows="2" placeholder="Ex: Rue de la Marine, Akwa, Douala"></textarea>
+          </div>
+        </div>
+        <div class="modal-footer bg-light">
+          <button type="button" class="btn btn-secondary btn-sm rounded" data-bs-dismiss="modal">Annuler</button>
+          <button type="submit" class="btn btn-primary btn-sm rounded"><i class="bi bi-save me-1"></i> Enregistrer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<%- include('../partials/footer') %>

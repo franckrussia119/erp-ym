@@ -1,0 +1,137 @@
+<%- include('../partials/header') %>
+
+<div class="row mb-4 align-items-center">
+  <div class="col-sm-6">
+    <h1 class="h3 text-slate-800"><i class="bi bi-person-badge-fill text-primary me-2"></i>Gestion des Représentants</h1>
+    <p class="text-muted mb-0">Registre centralisé des mandataires et représentants légaux liés aux importateurs/exportateurs.</p>
+  </div>
+  <div class="col-sm-6 text-sm-end mt-3 mt-sm-0">
+    <a href="/representants/create" class="btn btn-primary d-inline-flex align-items-center">
+      <i class="bi bi-person-plus-fill me-2"></i> Enregistrer un Représentant
+    </a>
+  </div>
+</div>
+
+
+<div class="card border-0 shadow-sm">
+  <div class="card-body p-0">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" style="font-size: 0.9rem;">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">ID</th>
+            <th>Nom Complet</th>
+            <th>Fonction / Rôle</th>
+            <th>Contact</th>
+            <th>Clients Associés</th>
+            <th class="text-center">Pièces Jointes</th>
+            <th class="text-end pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (reps && reps.length > 0) { %>
+            <% reps.forEach(rep => { %>
+              <tr id="rep-row-<%= rep.id %>">
+                <td class="ps-4 text-muted font-monospace">REP-<%= rep.id %></td>
+                <td>
+                  <div class="fw-bold text-dark"><%= rep.nom %> <%= rep.prenom || "" %></div>
+                  <span class="badge bg-success-subtle text-success small">Actif</span>
+                </td>
+                <td>
+                  <span class="text-secondary"><%= rep.fonction || 'Non renseignée' %></span>
+                </td>
+                <td>
+                  <div>
+                    <a href="tel:<%= rep.tel %>" class="text-decoration-none text-secondary"><i class="bi bi-telephone me-1 text-muted"></i><%= rep.tel || 'N/A' %></a>
+                  </div>
+                  <% if (rep.email) { %>
+                    <small class="text-muted"><i class="bi bi-envelope me-1"></i><%= rep.email %></small>
+                  <% } %>
+                </td>
+                <td>
+                  <div class="d-flex flex-wrap gap-1" style="max-width: 250px;">
+                    <% if (rep.client_representants && rep.client_representants.length > 0) { %>
+                      <% rep.client_representants.forEach(cr => { %>
+                        <span class="badge bg-primary-subtle text-primary border border-primary-subtle" title="<%= cr.client.nom %>">
+                          <%= cr.client.nom.length > 18 ? cr.client.nom.substring(0, 15) + '...' : cr.client.nom %>
+                        </span>
+                      <% }) %>
+                    <% } else { %>
+                      <span class="text-muted italic small">Aucun client lié</span>
+                    <% } %>
+                  </div>
+                </td>
+                <td class="text-center">
+                  <div class="d-flex justify-content-center gap-2">
+                    <% const hasCni = rep.documents.some(d => d.category === 'CNI_REP'); %>
+                    <% const hasProcu = rep.documents.some(d => d.category === 'PROCU_REP'); %>
+                    
+                    <span class="badge <%= hasCni ? 'bg-success' : 'bg-light text-muted border' %> d-inline-flex align-items-center" title="Carte Nationale d'Identité">
+                      <i class="bi <%= hasCni ? 'bi-check-circle-fill' : 'bi-dash-circle' %> me-1"></i> CNI
+                    </span>
+                    <span class="badge <%= hasProcu ? 'bg-success' : 'bg-light text-muted border' %> d-inline-flex align-items-center" title="Procuration / Mandat de Transit">
+                      <i class="bi <%= hasProcu ? 'bi-check-circle-fill' : 'bi-dash-circle' %> me-1"></i> Mandat
+                    </span>
+                  </div>
+                </td>
+                <td class="text-end pe-4">
+                  <div class="btn-group">
+                    <a href="/representants/<%= rep.id %>" class="btn btn-light btn-sm text-primary rounded-circle me-1" title="Voir détails">
+                      <i class="bi bi-eye-fill"></i>
+                    </a>
+                    <a href="/representants/<%= rep.id %>/edit" class="btn btn-light btn-sm text-secondary rounded-circle me-1" title="Modifier">
+                      <i class="bi bi-pencil-square"></i>
+                    </a>
+                    <button onclick="toggleRepStatus(<%= rep.id %>)" class="btn btn-light btn-sm text-danger rounded-circle" title="Désactiver">
+                      <i class="bi bi-power"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+          <% } else { %>
+            <tr>
+              <td colspan="7" class="text-center py-5 text-muted">
+                <i class="bi bi-person-badge-fill display-4 d-block mb-3 text-secondary"></i>
+                <p class="mb-0">Aucun représentant enregistré ou actif pour le moment.</p>
+                <a href="/representants/create" class="btn btn-sm btn-primary mt-3">Créer le premier représentant</a>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleRepStatus(id) {
+  if (confirm("Êtes-vous sûr de vouloir archiver/désactiver ce représentant ? Il n'apparaîtra plus dans la liste active.")) {
+    fetch(`/representants/${id}/toggle`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    })
+    .then(res => res.json())
+    .then(data => {
+      if (data.ok) {
+        const row = document.getElementById(`rep-row-${id}`);
+        if (row) {
+          row.style.transition = "all 0.5s ease";
+          row.style.opacity = "0";
+          setTimeout(() => row.remove(), 500);
+        }
+      } else {
+        alert("Erreur: " + (data.error || "Impossible de désactiver le représentant."));
+      }
+    })
+    .catch(err => {
+      console.error(err);
+      alert("Erreur réseau ou serveur lors de la désactivation.");
+    });
+  }
+}
+</script>
+
+<%- include('../partials/footer') %>

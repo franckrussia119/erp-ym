@@ -1,0 +1,22 @@
+<%
+  // Articles déclarés et leurs codes tarifaires (proposés depuis le dictionnaire pendant la saisie)
+  let arts = []; try { arts = JSON.parse(dossier.articles_json || '[]'); } catch (e) { arts = []; }
+  if (!arts.length) arts = [{ designation: '', code: '' }];
+%>
+<div class="col-12">
+  <label class="form-label">Articles et codes tarifaires</label>
+  <div class="art-lines" data-art-lines>
+    <% arts.forEach(a => { %>
+      <div class="art-line" data-art-line>
+        <div class="ct-wrap"><input name="art_designation" class="form-control form-control-sm" placeholder="Article (ex. FRIPERIE)" value="<%= a.designation %>" data-ct="des" autocomplete="off"></div>
+        <div class="ct-wrap"><input name="art_code" class="form-control form-control-sm font-monospace" placeholder="Code tarifaire" value="<%= a.code %>" data-ct="code" autocomplete="off"></div>
+        <button type="button" class="btn btn-sm btn-link text-danger p-0" data-art-del aria-label="Retirer l'article"><i class="bi bi-trash"></i></button>
+      </div>
+    <% }) %>
+  </div>
+  <div class="d-flex flex-wrap gap-2 align-items-center mt-1">
+    <button type="button" class="btn btn-light btn-sm" data-art-add><i class="bi bi-plus-lg me-1"></i>Ajouter un article</button>
+    <a class="small" href="/codes-tarifaires" target="_blank"><i class="bi bi-book me-1"></i>Dictionnaire des codes</a>
+    <small class="text-muted">Tapez l'article ou le code : les codes déjà utilisés sont proposés.</small>
+  </div>
+</div>

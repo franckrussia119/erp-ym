@@ -1,0 +1,139 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const dl = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '—';
+  const dd = (s) => s ? new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const nom = [e.prenom, e.nom].filter(Boolean).join(' ');
+  const anc = e.date_embauche ? Math.round((Date.now() - new Date(e.date_embauche).getTime()) / (365.25 * 864e5) * 10) / 10 : null;
+  const ROLES = { secretariat: 'Secrétariat', guce: 'GUCE', validation: 'Validation', acconage: 'Acconage', enlevement: 'Enlèvement et livraison', facturation: 'Facturation', fiscalite: 'Fiscalité', cloture: 'Clôture', agent_payeur: 'Caisse', comptable: 'Comptable', commercial: 'Commercial', operationnel: 'Transitaire', magasinier: 'Magasinier', rh: 'Ressources humaines', analyste: 'Analyste', daf: 'DAF', dga: 'DGA', dg: 'DG', pdg: 'PDG', auditeur1: 'Auditeur 1', auditeur2: 'Auditeur 2', lecture: 'Lecture seule' };
+%>
+<div class="page-head">
+  <span class="ph-ico" style="background: <%= e.departement ? e.departement.couleur : '#64748b' %>"><i class="bi bi-person-vcard"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1><%= nom %><% if (!e.actif) { %> <span class="badge text-bg-secondary">Sorti</span><% } %></h1>
+    <p class="mb-0"><span class="font-monospace"><%= e.matricule %></span> · <%= e.poste || 'Poste à renseigner' %><% if (e.departement) { %> · <span class="dept-chip" style="--d: <%= e.departement.couleur %>"><%= e.departement.nom %></span><% } %></p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/rh/employes"><i class="bi bi-arrow-left me-1"></i>Employés</a>
+    <a class="btn btn-primary btn-sm" href="/rh/employes/<%= e.id %>/modifier"><i class="bi bi-pencil me-1"></i>Modifier</a>
+  </div>
+</div>
+<%- include('_nav') %>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-briefcase me-2"></i>Contrat</div>
+      <div class="card-body">
+        <dl class="dm-dl">
+          <dt>Contrat</dt><dd><%= CONTRATS[e.type_contrat] %><%= e.categorie ? ' · catégorie ' + e.categorie : '' %></dd>
+          <dt>Embauche</dt><dd><%= dl(e.date_embauche) %><%= anc !== null ? ' (' + String(anc).replace('.', ',') + ' an' + (anc >= 2 ? 's' : '') + ')' : '' %></dd>
+          <% if (e.date_fin_contrat) { %><dt>Fin de contrat</dt><dd><%= dl(e.date_fin_contrat) %></dd><% } %>
+          <% if (!e.actif) { %><dt>Sortie</dt><dd><%= dl(e.date_sortie) %><%= e.motif_sortie ? ' · ' + e.motif_sortie : '' %></dd><% } %>
+          <dt>Téléphone</dt><dd><%= e.telephone || '—' %></dd>
+          <dt>E-mail</dt><dd><%= e.email || '—' %></dd>
+          <dt>Situation</dt><dd><%= SITUATIONS[e.situation] || '—' %><%= e.enfants ? ', ' + e.enfants + ' enfant' + (e.enfants > 1 ? 's' : '') : '' %></dd>
+          <dt>N° CNPS · NIU</dt><dd><%= e.cnps_numero || '—' %> · <%= e.niu || '—' %></dd>
+        </dl>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header d-flex align-items-center"><i class="bi bi-cash-coin me-2"></i><span class="flex-grow-1">Salaire</span><small class="text-muted"><%= MODES[e.mode_paiement] %><%= e.banque ? ' · ' + e.banque : '' %></small></div>
+      <div class="card-body">
+        <% if (!e.salaire_base) { %>
+          <div class="text-muted">Pas encore de salaire de base. <a href="/rh/employes/<%= e.id %>/modifier">Compléter le dossier</a> pour l'inclure dans la paie.</div>
+        <% } else { %>
+          <div class="rh-sim">
+            <div><span>Salaire de base</span><b><%= F(simulation.base) %></b></div>
+            <% primes.forEach(p => { %><div><span><%= p.libelle %><%= p.imposable ? '' : ' (non imposable)' %></span><b><%= F(p.montant) %></b></div><% }) %>
+            <div class="tot"><span>Brut</span><b><%= F(simulation.brut) %></b></div>
+            <div class="neg"><span>CNPS salarié</span><b>−<%= F(simulation.cnps_salarie) %></b></div>
+            <div class="neg"><span>IRPP et CAC</span><b>−<%= F(simulation.irpp + simulation.cac) %></b></div>
+            <div class="neg"><span>CFC, RAV, TDL</span><b>−<%= F(simulation.cfc + simulation.rav + simulation.tdl) %></b></div>
+            <div class="net"><span>Net mensuel estimé</span><b><%= F(simulation.net) %> F</b></div>
+            <div class="emp"><span>Charges patronales</span><b><%= F(simulation.employeur.total) %></b></div>
+            <div class="emp"><span>Coût mensuel pour l'entreprise</span><b><%= F(simulation.cout_total) %> F</b></div>
+          </div>
+        <% } %>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-receipt me-2"></i>Bulletins de paie</div>
+      <div class="card-body p-0">
+        <% if (!bulletins.length) { %><div class="p-3 text-muted small">Aucun bulletin pour l'instant.</div><% } %>
+        <% bulletins.forEach(b => { %>
+          <a class="rh-row" href="/rh/bulletins/<%= b.id %>" target="_blank"><span><%= periodeLabel(b.periode) %></span><span class="badge text-bg-<%= b.periode.statut === 'BROUILLON' ? 'warning' : b.periode.statut === 'PAYEE' ? 'success' : 'primary' %>"><%= b.periode.statut === 'BROUILLON' ? 'En préparation' : b.periode.statut === 'PAYEE' ? 'Payé' : 'Validé' %></span><b><%= F(b.net) %> F</b></a>
+        <% }) %>
+      </div>
+    </div>
+
+    <div class="card mb-4" id="pieces">
+      <div class="card-header"><i class="bi bi-folder2-open me-2"></i>Pièces du dossier</div>
+      <div class="card-body">
+        <% if (!pieces.length) { %><div class="text-muted small mb-2">Contrat, pièce d'identité, diplômes, attestation CNPS…</div><% } %>
+        <div class="d-flex flex-wrap gap-2 mb-3">
+          <% pieces.forEach(p => { %><a class="btn btn-light btn-sm" target="_blank" href="/rh/employes/<%= e.id %>/pieces/<%= encodeURIComponent(p.filename) %>"><i class="bi bi-paperclip me-1"></i><b><%= p.nature %></b> · <%= p.original %></a><% }) %>
+        </div>
+        <form class="d-flex flex-wrap gap-2" method="POST" action="/rh/employes/<%= e.id %>/pieces" enctype="multipart/form-data">
+          <select name="nature" class="form-select form-select-sm w-auto"><% ['Contrat', "Pièce d'identité", 'Diplôme', 'CV', 'Attestation CNPS', 'Certificat médical', 'Avenant', 'Autre'].forEach(n => { %><option><%= n %></option><% }) %></select>
+          <input type="file" name="pieces" class="form-control form-control-sm" style="max-width: 300px" multiple required>
+          <button class="btn btn-light btn-sm"><i class="bi bi-upload me-1"></i>Ajouter</button>
+        </form>
+      </div>
+    </div>
+
+    <%- include('../partials/_fil', { cible: 'employe', cibleId: e.id, titre: 'Notes RH (visibles par la RH et la direction)' }) %>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-calendar2-week me-2"></i>Congés payés</div>
+      <div class="card-body">
+        <div class="rh-conges">
+          <div><b><%= String(conges.acquis).replace('.', ',') %></b><span>acquis</span></div>
+          <div><b><%= String(conges.pris).replace('.', ',') %></b><span>pris</span></div>
+          <div class="<%= conges.solde < 0 ? 'neg' : '' %>"><b><%= String(conges.solde).replace('.', ',') %></b><span>restants</span></div>
+        </div>
+        <p class="small text-muted mt-2 mb-2">1,5 jour par mois de service<%= e.conges_report ? ', plus ' + String(e.conges_report).replace('.', ',') + ' jours reportés' : '' %>. Les congés annuels approuvés sont déduits.</p>
+        <% conges.historique.slice(0, 6).forEach(c => { %><div class="rh-line"><a href="/demandes/<%= c.id %>"><%= c.motif %></a><span><%= dd(c.du) %> → <%= dd(c.au) %> · <%= c.jours %> j</span></div><% }) %>
+        <% if (!e.user) { %><p class="small text-muted mb-0">Les demandes de congé se font depuis le compte de l'employé.</p><% } %>
+      </div>
+    </div>
+
+    <div class="card mb-4">
+      <div class="card-header"><i class="bi bi-key me-2"></i>Compte de connexion</div>
+      <div class="card-body">
+        <% if (e.user) { %>
+          <div><b><%= e.user.email %></b></div>
+          <div class="small text-muted"><%= ROLES[e.user.role] || e.user.role %> · <%= e.user.actif ? 'actif' : 'désactivé' %><%= e.user.last_login ? ' · dernière connexion le ' + dl(e.user.last_login) : '' %></div>
+        <% } else if (e.actif) { %>
+          <p class="small text-muted">Pas encore de compte. Créez-en un pour qu'il fasse ses demandes et voie ses bulletins.</p>
+          <form method="POST" action="/rh/employes/<%= e.id %>/compte" class="d-grid gap-2">
+            <input type="email" name="email" class="form-control form-control-sm" placeholder="adresse e-mail" value="<%= e.email || '' %>" required>
+            <select name="role" class="form-select form-select-sm" required><option value="">Rôle dans l'ERP…</option><% Object.entries(ROLES).forEach(([k, l]) => { %><option value="<%= k %>"><%= l %></option><% }) %></select>
+            <button class="btn btn-light btn-sm"><i class="bi bi-person-plus me-1"></i>Créer le compte</button>
+          </form>
+        <% } else { %><div class="small text-muted">Aucun compte.</div><% } %>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><i class="bi bi-box-arrow-right me-2"></i><%= e.actif ? 'Départ' : 'Réintégration' %></div>
+      <div class="card-body">
+        <% if (e.actif) { %>
+          <form method="POST" action="/rh/employes/<%= e.id %>/sortie" class="d-grid gap-2" onsubmit="return confirm('Enregistrer le départ de <%= nom.replace(/'/g, '') %> ? Son compte de connexion sera désactivé.')">
+            <input type="date" name="date_sortie" class="form-control form-control-sm" value="<%= new Date().toISOString().slice(0, 10) %>">
+            <input name="motif_sortie" class="form-control form-control-sm" placeholder="Motif (démission, fin de contrat…)">
+            <button class="btn btn-outline-danger btn-sm">Enregistrer le départ</button>
+          </form>
+          <div class="form-text">Le dossier et les bulletins sont conservés.</div>
+        <% } else { %>
+          <form method="POST" action="/rh/employes/<%= e.id %>/reintegrer"><button class="btn btn-light btn-sm">Réintégrer dans les effectifs</button></form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+</div>
+<%- include('../partials/footer') %>

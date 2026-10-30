@@ -1,0 +1,161 @@
+<%- include('../partials/header') %>
+<%
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const modeL = { ESPECES: 'Espèces', CHEQUE: 'Chèque', VIREMENT: 'Virement', MOBILE_MONEY: 'Mobile money', JUSTIFICATIF: 'Reçus du bon réel' };
+  // La caisse saisit directement, sauf sur son propre compte ; tous les autres font une demande que la caisse confirme
+  const isOwn = titulaire.type === 'personnel' && titulaire.id === user.id;
+  const direct = canWrite && !isOwn;
+  const back = '/comptes/' + titulaire.type + '/' + titulaire.id;
+  const etatL = { EN_ATTENTE: ['En attente de la caisse', 'warning'], CONFIRMEE: ['Confirmée', 'success'], REFUSEE: ['Refusée', 'danger'] };
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi <%= titulaire.type === 'representant' ? 'bi-person-badge' : 'bi-person-vcard' %>"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1 class="text-truncate"><%= titulaire.nom %></h1>
+    <p class="mb-0"><%= titulaire.sous %><%= titulaire.tel ? ' · ' + titulaire.tel : '' %></p>
+  </div>
+  <div class="d-flex gap-2">
+    <% if (typeof soi === 'undefined' || !soi) { %><a href="/comptes?onglet=<%= titulaire.type === 'representant' ? 'representants' : 'personnel' %>" class="btn btn-light"><i class="bi bi-arrow-left me-1"></i>Comptes</a><% } %>
+    <% if (direct) { %>
+      <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#accModal" data-sens="ENTREE"><i class="bi bi-plus-lg me-1"></i>Créditer</button>
+      <button class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#accModal" data-sens="SORTIE"><i class="bi bi-dash-lg me-1"></i>Débiter</button>
+    <% } else { %>
+      <button class="btn btn-outline-success" data-bs-toggle="modal" data-bs-target="#accModal" data-sens="ENTREE"><i class="bi bi-plus-lg me-1"></i>Demander un dépôt</button>
+      <button class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#accModal" data-sens="SORTIE"><i class="bi bi-dash-lg me-1"></i>Demander un retrait</button>
+    <% } %>
+    <% if (typeof dossiersRep !== 'undefined') { %>
+      <div class="btn-group">
+        <button class="btn btn-light" onclick="ymPrint('releve')"><i class="bi bi-printer me-1"></i>Imprimer le relevé</button>
+        <button class="btn btn-light" onclick="ymPrint('activite')">Imprimer l'activité</button>
+      </div>
+    <% } else { %>
+      <button class="btn btn-light" onclick="window.print()"><i class="bi bi-printer me-1"></i>Imprimer</button>
+    <% } %>
+  </div>
+</div>
+
+<div class="acc-sum">
+  <div class="in"><span><%= titulaire.type === 'representant' ? 'Plus · déposé ou réglé' : 'Plus · versé, rendu ou justifié' %></span><b>+<%= f(verse) %> F</b></div>
+  <div class="out"><span><%= titulaire.type === 'representant' ? 'Moins · dépensé sur ses dossiers ou payé' : 'Moins · donné par la caisse' %></span><b>−<%= f(recu) %> F</b></div>
+  <div class="acc-balance <%= solde >= 0 ? 'pos' : 'neg' %>"><span>Solde du compte</span><b><%= solde > 0 ? '+' : '' %><%= f(solde) %> F</b><small><%= solde > 0 ? 'La caisse lui doit ce montant' : solde < 0 ? 'Il doit ce montant à la caisse' : 'Compte soldé' %></small></div>
+  <% if (titulaire.type === 'personnel') { %><div><span>Bons payés à justifier</span><b><%= f(aJustifier.reduce((t, b) => t + b.montant_demande, 0)) %> F</b></div><% } %>
+</div>
+
+<% if (demandes.length) { %>
+  <div class="card mb-3 d-print-none" id="demandes"><div class="card-header d-flex justify-content-between"><span><i class="bi bi-hourglass-split me-1"></i>Demandes à la caisse</span><span class="small text-muted">Rien ne bouge avant la confirmation de la caisse</span></div>
+    <div class="list-group list-group-flush">
+      <% demandes.forEach(d => { const e = etatL[d.etat] || [d.etat, 'secondary']; const peut = canWrite && d.etat === 'EN_ATTENTE' && d.demandeur_id !== user.id && d.personne_id !== user.id; %>
+        <div class="list-group-item dem-row">
+          <div class="d-flex justify-content-between align-items-start gap-2 flex-wrap">
+            <div class="min-w-0">
+              <div class="fw-semibold"><%= d.sens === 'ENTREE' ? 'Dépôt' : 'Retrait' %> de <%= f(d.montant) %> F <span class="badge text-bg-<%= e[1] %> ms-1"><%= e[0] %></span></div>
+              <div class="small text-muted">Demandé par <%= d.demandeur || '—' %> le <%= new Date(d.created_at).toLocaleDateString('fr-FR') %> · <%= modeL[d.mode] || d.mode %><%= d.banque ? ' · ' + d.banque : '' %><%= d.reference ? ' · ' + d.reference : '' %><%= d.motif ? ' · ' + d.motif : '' %></div>
+              <% if (d.etat !== 'EN_ATTENTE') { %><div class="small text-muted"><%= d.etat === 'CONFIRMEE' ? 'Confirmée' : 'Refusée' %> par <%= d.traitePar || '—' %><%= d.traite_at ? ' le ' + new Date(d.traite_at).toLocaleDateString('fr-FR') : '' %><%= d.motif_refus ? ' · ' + d.motif_refus : '' %></div><% } %>
+            </div>
+            <% if (peut) { %>
+              <div class="d-flex gap-2 flex-wrap">
+                <form method="POST" action="/comptes/demandes/<%= d.id %>/confirmer"><input type="hidden" name="back" value="<%= back %>"><button class="btn btn-sm btn-success"><i class="bi bi-check-lg me-1"></i>Confirmer</button></form>
+                <form method="POST" action="/comptes/demandes/<%= d.id %>/refuser" class="d-flex gap-1"><input type="hidden" name="back" value="<%= back %>"><input name="motif" class="form-control form-control-sm" placeholder="Motif du refus" style="max-width:160px"><button class="btn btn-sm btn-outline-danger">Refuser</button></form>
+              </div>
+            <% } else if (canWrite && d.etat === 'EN_ATTENTE') { %>
+              <span class="small text-muted">Un autre agent de caisse doit la confirmer</span>
+            <% } %>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+<% } %>
+
+<% if (typeof dossiersRep !== 'undefined') { const stepL = { CREE: 'Créé', GUCE: 'GUCE', VALIDATION: 'Validation', PAIEMENT_DROITS: 'Facture 1', EN_TRAITEMENT: 'En traitement', BON_PROVISOIR: 'Bon provisoire', BON_REEL: 'Bon réel', FACTURATION: 'Facturation', CLOTURE: 'Clôture', ARCHIVE: 'Archivé' }; %>
+  <div class="card mb-3 pr-activite" id="dossiers-rep">
+    <div class="card-header d-flex justify-content-between"><span><i class="bi bi-folder2-open me-1"></i>Dossiers du représentant</span><span class="small text-muted"><%= dossiersRep.length %> dossier(s) · <%= f(dossiersRep.reduce((t, d) => t + d.depenses, 0)) %> F dépensés</span></div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0">
+        <thead><tr><th>Dossier</th><th>Client</th><th>Étape</th><th class="text-end">Dépenses</th><th class="text-end">Réglé</th><th class="d-print-none"></th></tr></thead>
+        <tbody>
+          <% if (!dossiersRep.length) { %><tr><td colspan="6" class="text-center text-muted py-3">Aucun dossier rattaché à ce représentant.</td></tr><% } %>
+          <% dossiersRep.forEach(d => { %>
+            <tr>
+              <td><a href="/dossiers/<%= d.id %>" class="fw-semibold"><%= d.numero_ordre ? 'N° ' + d.numero_ordre : 'Sans numéro' %></a><div class="small text-muted font-monospace"><%= d.numero %></div></td>
+              <td class="small"><%= d.client ? d.client.nom : '' %><div class="text-muted">BL <%= d.bl || '—' %><%= d.contenu ? ' · ' + d.contenu : '' %></div></td>
+              <td class="small"><%= stepL[d.pipeline_status] || d.pipeline_status %></td>
+              <td class="text-end text-danger fw-semibold"><%= d.depenses ? '−' + f(d.depenses) + ' F' : '—' %><div class="small text-muted fw-normal"><%= d.nbBons %> bon(s)</div></td>
+              <td class="text-end text-success fw-semibold"><%= d.regle ? '+' + f(d.regle) + ' F' : '—' %></td>
+              <td class="d-print-none text-end"><a href="/dossiers/<%= d.id %>#finance" class="btn btn-sm btn-light">Facturation</a></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<% } %>
+
+<% if (aJustifier.length) { %>
+  <div class="card mb-3"><div class="card-header"><i class="bi bi-receipt me-1"></i>Bons payés, pas encore justifiés</div>
+    <div class="list-group list-group-flush">
+      <% aJustifier.forEach(b => { %>
+        <a class="list-group-item list-group-item-action d-flex justify-content-between" href="/bons/<%= b.id %>"><span><b><%= b.numero %></b> · <%= b.objet %><small class="text-muted ms-2"><%= b.paye_at ? 'payé le ' + new Date(b.paye_at).toLocaleDateString('fr-FR') : '' %></small></span><b><%= f(b.montant_demande) %> F</b></a>
+      <% }) %>
+    </div>
+  </div>
+<% } %>
+
+<div class="card pr-releve">
+  <div class="card-header d-flex justify-content-between"><span><i class="bi bi-journal-text me-1"></i>Relevé</span><span class="small text-muted"><%= lignes.length %> mouvement(s)</span></div>
+  <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead><tr><th>Date</th><th>Opération</th><th class="text-end">Plus (+)</th><th class="text-end">Moins (−)</th><th class="text-end">Solde</th></tr></thead>
+      <tbody>
+        <% if (!lignes.length) { %><tr><td colspan="5" class="text-center text-muted py-4">Aucun mouvement sur ce compte.</td></tr><% } %>
+        <% lignes.slice().reverse().forEach(m => { %>
+          <tr>
+            <td class="text-nowrap small"><%= new Date(m.date).toLocaleDateString('fr-FR') %></td>
+            <td><div class="fw-semibold small"><%= m.libelle %></div><div class="small text-muted"><%= m.catLabel %> · <%= modeL[m.mode] || m.mode %><%= m.banque ? ' · ' + m.banque : '' %><%= m.reference ? ' · ' + m.reference : '' %><% if (m.bon) { %> · <a href="/bons/<%= m.bon.id %>"><%= m.bon.numero %></a><% } %><% if (m.dossier) { %> · <a href="/dossiers/<%= m.dossier.id %>"><%= m.dossier.numero %></a><% } %></div></td>
+            <td class="text-end text-success fw-semibold"><%= m.sens === 'ENTREE' ? '+' + f(m.montant) + ' F' : '' %></td>
+            <td class="text-end text-danger fw-semibold"><%= m.sens === 'SORTIE' ? '−' + f(m.montant) + ' F' : '' %></td>
+            <td class="text-end small fw-semibold <%= m.cumul < 0 ? 'text-danger' : '' %>"><%= m.cumul > 0 ? '+' : '' %><%= f(m.cumul) %> F</td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<script>
+  // Relevé seul ou activité (dossiers) seule
+  function ymPrint(k) { document.body.classList.add('print-' + k); window.print(); setTimeout(function () { document.body.classList.remove('print-' + k); }, 500); }
+</script>
+<div class="modal fade" id="accModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <form class="modal-content cx-modal" method="POST" action="/comptes/<%= titulaire.type %>/<%= titulaire.id %>/<%= direct ? 'mouvement' : 'demande' %>">
+      <div class="modal-header"><h5 class="modal-title" id="accTitle">Créditer le compte</h5><button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+      <div class="modal-body row g-2 ops-form">
+        <input type="hidden" name="sens" id="accSens" value="ENTREE">
+        <div class="col-12"><div class="acc-flow" id="accFlow"></div></div>
+        <div class="col-6"><label class="form-label">Montant (F) <span class="text-danger">*</span></label><input name="montant" inputmode="decimal" data-money class="form-control" required></div>
+        <div class="col-6"><label class="form-label">Mode</label><select name="mode" id="accMode" class="form-select"><option value="ESPECES">Espèces</option><option value="CHEQUE">Chèque</option><option value="VIREMENT">Virement</option><option value="MOBILE_MONEY">Mobile money</option></select></div>
+        <div class="col-12" id="accBanqueCol" hidden><label class="form-label">Banque <span class="text-danger">*</span></label><select name="banque" id="accBanque" class="form-select"><option value="">Choisir la banque…</option><% banques.forEach(bq => { %><option value="<%= bq.nom %>"><%= bq.nom %></option><% }) %></select></div>
+        <div class="col-12"><label class="form-label">Motif</label><input name="libelle" class="form-control" placeholder="ex. Dépôt pour le dossier du client, avance…"></div>
+        <div class="col-12"><label class="form-label">Référence</label><input name="reference" class="form-control" placeholder="N° de reçu, de chèque…"></div>
+      </div>
+      <div class="modal-footer"><button type="button" class="btn btn-light" data-bs-dismiss="modal">Annuler</button><button class="btn btn-primary" id="accBtn"><%= direct ? 'Enregistrer' : 'Envoyer à la caisse' %></button></div>
+    </form>
+  </div>
+</div>
+<script>
+  document.getElementById('accModal').addEventListener('show.bs.modal', function (e) {
+    var isE = (e.relatedTarget && e.relatedTarget.getAttribute('data-sens')) !== 'SORTIE';
+    document.getElementById('accSens').value = isE ? 'ENTREE' : 'SORTIE';
+    document.getElementById('accTitle').textContent = <%- direct ? "isE ? 'Créditer le compte' : 'Débiter le compte'" : "isE ? 'Demander un dépôt' : 'Demander un retrait'" %>;
+    document.getElementById('accBtn').className = 'btn ' + (isE ? 'btn-success' : 'btn-danger');
+    document.getElementById('accFlow').innerHTML = isE
+      ? '<i class="bi bi-person"></i> <%= titulaire.nom.replace(/'/g, "\\'") %> <i class="bi bi-arrow-right"></i> <i class="bi bi-safe2"></i> Caisse <span>entrée de caisse</span>'
+      : '<i class="bi bi-safe2"></i> Caisse <i class="bi bi-arrow-right"></i> <i class="bi bi-person"></i> <%= titulaire.nom.replace(/'/g, "\\'") %> <span>sortie de caisse</span>';
+    <% if (!direct) { %>document.getElementById('accFlow').innerHTML += '<div class="small text-muted mt-1"><i class="bi bi-info-circle me-1"></i>Demande seulement : le compte et la caisse ne bougent qu\'après confirmation par la caisse.</div>';<% } %>
+  });
+  document.getElementById('accMode').addEventListener('change', function () {
+    var b = this.value === 'CHEQUE' || this.value === 'VIREMENT';
+    document.getElementById('accBanqueCol').hidden = !b; document.getElementById('accBanque').required = b;
+  });
+</script>
+<%- include('../partials/footer') %>

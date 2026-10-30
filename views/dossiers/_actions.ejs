@@ -1,0 +1,298 @@
+<%
+  // Zone « Prochaine action » du dossier. Les rôles autorisés viennent de STAGE_ACTORS (lib/pipeline.ts),
+  // les mêmes que ceux vérifiés par les routes : un bouton affiché est un bouton qui marche.
+  const role = user.role;
+  const can = (stage) => (STAGE_ACTORS[stage] || []).includes(role);
+  const terrain = ["acconage", "enlevement", "super_admin"].includes(role);
+  const isCaisse = ["agent_payeur", "caisse", "super_admin"].includes(role);
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const isoToday = new Date().toISOString().slice(0, 10);
+  const bons = dossier.bons_provisoir || [];
+  const pendingBons = bons.filter(b => b.etat === 'EN_ATTENTE');
+  const toJustify = bons.filter(b => b.etat === 'APPROUVE' && !b.bon_reel);
+  const toConfirm = bons.filter(b => b.bon_reel && !b.bon_reel.confirme_at);
+  const waitMsg = (txt) => `<div class="wait-line"><i class="bi bi-hourglass-split"></i>${txt}</div>`;
+  const VK = [['pdg','PDG'],['dg','DG'],['dga','DGA'],['daf','DAF'],['audit','Audit']];
+%>
+
+<% if (currentStatus === "CREE") { %>
+  <% if (dossier.rejet_motif) { %>
+    <div class="alert alert-danger d-sm-flex justify-content-between align-items-center gap-3 mb-3">
+      <div><b><i class="bi bi-x-octagon me-1"></i>Dossier rejeté par le secrétariat</b><div class="small">Motif : <%= dossier.rejet_motif %><%= dossier.rejet_par ? ' · ' + dossier.rejet_par : '' %><%= dossier.rejet_at ? ' · ' + new Date(dossier.rejet_at).toLocaleDateString('fr-FR') : '' %></div></div>
+      <% if (can("CREE")) { %><form action="/dossiers/<%= dossier.id %>/pipeline/rejet-secretariat" method="POST" class="mt-2 mt-sm-0"><input type="hidden" name="lever" value="1"><button class="btn btn-sm btn-outline-danger">Lever le rejet</button></form><% } %>
+    </div>
+  <% } %>
+  <% if (can("CREE")) { %>
+    <div class="act-box d-sm-flex justify-content-between align-items-center gap-3">
+      <div>
+        <h6 class="fw-bold mb-1">Transmettre au GUCE</h6>
+        <p class="text-xs text-muted mb-0">Le service GUCE enregistrera l'assurance, le BESC et le RVC. Le dossier reçoit alors son numéro.</p>
+      </div>
+      <div class="d-flex gap-2 mt-2 mt-sm-0">
+        <% if (!dossier.rejet_motif) { %><button type="button" class="btn btn-outline-danger" data-bs-toggle="collapse" data-bs-target="#rejetSec"><i class="bi bi-x-lg me-1"></i>Rejeter</button><% } %>
+        <form action="/dossiers/<%= dossier.id %>/pipeline/soumettre-guce" method="POST">
+          <button type="submit" class="btn btn-primary px-4"><i class="bi bi-send-check-fill me-1"></i>Transmettre au GUCE</button>
+        </form>
+      </div>
+    </div>
+    <% if (!dossier.rejet_motif) { %>
+      <form id="rejetSec" class="collapse act-box mt-2" action="/dossiers/<%= dossier.id %>/pipeline/rejet-secretariat" method="POST">
+        <label class="form-label fw-semibold">Motif du rejet <span class="text-danger">*</span></label>
+        <div class="d-flex gap-2 flex-wrap">
+          <input name="motif" class="form-control flex-grow-1" style="min-width:220px" required value="Client pas prêt à valider" list="rejetMotifs">
+          <datalist id="rejetMotifs"><option value="Client pas prêt à valider"><option value="Documents incomplets"><option value="Client injoignable"></datalist>
+          <button class="btn btn-danger">Rejeter le dossier</button>
+        </div>
+        <div class="small text-muted mt-1">Le dossier reste au secrétariat avec ce motif. Vous pourrez le transmettre au GUCE plus tard.</div>
+      </form>
+    <% } %>
+  <% } else { %><%- waitMsg("En attente de transmission par le secrétariat.") %><% } %>
+
+<% } else if (currentStatus === "GUCE") { %>
+  <% if (can("GUCE")) { %>
+    <div class="act-box">
+      <h6 class="fw-bold mb-1"><i class="bi bi-globe2 me-1"></i>Formalités GUCE</h6>
+      <p class="text-xs text-muted mb-3">Renseignez les montants payés pour l'assurance, le BESC et le RVC, et joignez les quittances.</p>
+      <form action="/dossiers/<%= dossier.id %>/pipeline/valider-guce" method="POST" enctype="multipart/form-data" class="row g-2 ops-form">
+        <div class="col-sm-6 col-lg-3"><label class="form-label">Assurance (FCFA)</label><input type="number" name="assurance_montant" class="form-control form-control-sm" min="0"></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">BESC (FCFA)</label><input type="number" name="besc_montant" class="form-control form-control-sm" min="0"></div>
+        <div class="col-sm-6 col-lg-3"><label class="form-label">RVC (FCFA)</label><input type="number" name="rvc_montant" class="form-control form-control-sm" min="0"></div>
+        <div class="col-sm-6 col-lg-3 d-flex align-items-end"><div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="manifeste_checked" id="chManifest" checked><label class="form-check-label small" for="chManifest">Manifesté</label></div></div>
+        <div class="col-md-4"><label class="form-label">Quittance assurance <span class="text-danger">*</span></label><input type="file" name="fichier_assurance" class="form-control form-control-sm" accept=".pdf,image/*"></div>
+        <div class="col-md-4"><label class="form-label">Quittance BESC</label><input type="file" name="fichier_besc" class="form-control form-control-sm" accept=".pdf,image/*"></div>
+        <div class="col-md-4"><label class="form-label">Quittance RVC</label><input type="file" name="fichier_rvc" class="form-control form-control-sm" accept=".pdf,image/*"></div>
+        <div class="col-12 text-end mt-2"><button type="submit" class="btn btn-success px-4"><i class="bi bi-shield-check me-1"></i>Enregistrer et transmettre à la validation</button></div>
+      </form>
+    </div>
+  <% } else { %><%- waitMsg("En attente des formalités du service GUCE.") %><% } %>
+
+<% } else if (currentStatus === "VALIDATION") { %>
+  <% if (can("VALIDATION")) { %>
+    <div class="act-box">
+      <h6 class="fw-bold mb-1"><i class="bi bi-patch-check me-1"></i>Validation de la déclaration sur CAMCIS</h6>
+      <p class="text-xs text-muted mb-3">Reportez le numéro de déclaration, les droits liquidés et le circuit attribué. La quittance sera saisie à l'étape suivante, après le paiement à la banque.</p>
+      <form action="/dossiers/<%= dossier.id %>/pipeline/approuver" method="POST" enctype="multipart/form-data" class="mb-3">
+        <div class="row g-2 mb-3 ops-form">
+          <div class="col-sm-6 col-lg-4"><label class="form-label">N° de déclaration CAMCIS <span class="text-danger">*</span></label><input name="camcis_numero" class="form-control form-control-sm" value="<%= dossier.camcis_numero || '' %>" required></div>
+          <div class="col-sm-6 col-lg-4"><label class="form-label">Date</label><input type="date" name="camcis_date" class="form-control form-control-sm" value="<%= dossier.camcis_date ? new Date(dossier.camcis_date).toISOString().slice(0,10) : isoToday %>"></div>
+          <div class="col-sm-6 col-lg-4"><label class="form-label">Droits liquidés (FCFA)</label><input name="camcis_liquidation" inputmode="decimal" class="form-control form-control-sm" value="<%= dossier.camcis_liquidation ?? '' %>"></div>
+          <div class="col-12"><label class="form-label">Circuit de contrôle <span class="text-danger">*</span></label>
+            <div class="circuit-pick">
+              <label class="cc-vert"><input type="radio" name="camcis_circuit" value="VERT" required <%= dossier.camcis_circuit === 'VERT' ? 'checked' : '' %>><span class="cdot"></span>Vert<small>Mainlevée sans visite</small></label>
+              <label class="cc-jaune"><input type="radio" name="camcis_circuit" value="JAUNE" <%= dossier.camcis_circuit === 'JAUNE' ? 'checked' : '' %>><span class="cdot"></span>Jaune<small>Contrôle documentaire</small></label>
+              <label class="cc-rouge"><input type="radio" name="camcis_circuit" value="ROUGE" <%= dossier.camcis_circuit === 'ROUGE' ? 'checked' : '' %>><span class="cdot"></span>Rouge<small>Visite physique</small></label>
+            </div>
+          </div>
+          <div class="col-sm-6"><label class="form-label">N° GN <span class="text-danger">*</span></label><input name="gn_numero" class="form-control form-control-sm font-monospace" value="<%= dossier.gn_numero || '' %>" required></div>
+          <div class="col-sm-6"><label class="form-label">N° DAU <span class="text-danger">*</span></label><input name="dau_numero" class="form-control form-control-sm font-monospace" value="<%= dossier.dau_numero || '' %>" required></div>
+          <%- include('_articles', { dossier }) %>
+          <div class="col-12"><label class="form-label">Déclaration CAMCIS (PDF ou photo) <span class="text-danger">*</span></label><input type="file" name="fichiers_camcis" class="form-control form-control-sm" accept=".pdf,image/*" multiple></div>
+        </div>
+        <button type="submit" class="btn btn-success px-4"><i class="bi bi-check-circle-fill me-1"></i>Déclaration validée sur CAMCIS</button>
+      </form>
+      <form action="/dossiers/<%= dossier.id %>/pipeline/rejeter" method="POST" onsubmit="return confirm('Renvoyer le dossier au GUCE ?')">
+        <button type="submit" class="btn btn-outline-danger btn-sm"><i class="bi bi-x-circle me-1"></i>Rejeter (retour au GUCE)</button>
+      </form>
+    </div>
+  <% } else { %><%- waitMsg("En attente de la validation CAMCIS.") %><% } %>
+
+<% } else if (currentStatus === "PAIEMENT_DROITS") { %>
+  <div id="droits"></div>
+  <% if (can("PAIEMENT_DROITS")) { %>
+    <%
+      const bqs = (typeof banques !== 'undefined' ? banques : []);
+      const bqCur = dossier.droits_banque || '';
+      const droitsVal = dossier.droits_paye_montant ?? dossier.camcis_liquidation ?? '';
+    %>
+    <div class="act-box f1-box">
+      <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
+        <h6 class="fw-bold mb-0"><i class="bi bi-receipt me-1"></i>Facture 1 et paiement des droits</h6>
+        <% if (facture1) { %><a href="/facturation/<%= facture1.id %>" class="ms-auto small fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i>Facture 1 <%= facture1.numero %> · <%= f(facture1.total_ttc) %> F</a><% } %>
+      </div>
+      <p class="text-xs text-muted mb-3"><%= facture1 ? 'La facture 1 est émise. Saisissez le paiement à la banque.' : 'Remplissez tout : la facture 1 est émise automatiquement à l\'enregistrement (droits + frais bancaires) et le dossier passe en traitement.' %></p>
+      <form action="/dossiers/<%= dossier.id %>/paiement-droits" method="POST" enctype="multipart/form-data" class="row g-2 ops-form" data-f1>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Droits liquidés (FCFA) <span class="text-danger">*</span></label><input name="droits_montant" inputmode="decimal" class="form-control form-control-sm" value="<%= droitsVal %>" required data-f1-droits <%= facture1 ? 'readonly' : '' %>></div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Frais bancaires (FCFA)</label><input name="droits_frais" inputmode="decimal" class="form-control form-control-sm" value="<%= dossier.droits_frais ?? '' %>" placeholder="0" data-f1-frais <%= facture1 ? 'readonly' : '' %>></div>
+        <div class="col-sm-12 col-lg-4"><label class="form-label">Total de la facture 1</label><div class="f1-total"><b data-f1-total>0</b> F <small>droits + frais</small></div></div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Banque <span class="text-danger">*</span></label>
+          <select name="droits_banque" class="form-select form-select-sm" required>
+            <option value="">Choisir la banque…</option>
+            <% bqs.forEach(bq => { %><option value="<%= bq.nom %>" <%= bqCur === bq.nom ? 'selected' : '' %>><%= bq.nom %><%= bq.numero_compte ? ' · ' + bq.numero_compte : '' %></option><% }) %>
+            <% if (bqCur && !bqs.some(bq => bq.nom === bqCur)) { %><option value="<%= bqCur %>" selected><%= bqCur %></option><% } %>
+          </select>
+          <% if (['super_admin', 'pdg', 'dg', 'dga', 'daf', 'comptable', 'finances'].includes(user.role)) { %><a class="small" href="/admin/banques" target="_blank">Gérer la liste des banques</a><% } %>
+        </div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Paiement par <span class="text-danger">*</span></label>
+          <div class="seg-pick">
+            <label><input type="radio" name="paye_par" value="CLIENT" required <%= dossier.droits_paye_par === 'CLIENT' ? 'checked' : '' %>><span><i class="bi bi-person"></i>Le client</span></label>
+            <label><input type="radio" name="paye_par" value="SOCIETE" <%= dossier.droits_paye_par === 'SOCIETE' ? 'checked' : '' %>><span><i class="bi bi-building"></i>La société</span></label>
+          </div></div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Mode de paiement <span class="text-danger">*</span></label>
+          <div class="seg-pick">
+            <label><input type="radio" name="mode_paiement" value="BANQUE" required <%= dossier.droits_mode === 'BANQUE' ? 'checked' : '' %>><span><i class="bi bi-bank"></i>Banque</span></label>
+            <label><input type="radio" name="mode_paiement" value="CAISSE" <%= dossier.droits_mode === 'CAISSE' ? 'checked' : '' %>><span><i class="bi bi-safe2"></i>Caisse</span></label>
+          </div></div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">N° de quittance <span class="text-danger">*</span></label><input name="camcis_quittance" class="form-control form-control-sm" value="<%= dossier.camcis_quittance || '' %>" required></div>
+        <div class="col-sm-6 col-lg-4"><label class="form-label">Date du paiement</label><input type="date" name="droits_paye_date" class="form-control form-control-sm" value="<%= dossier.droits_paye_date ? new Date(dossier.droits_paye_date).toISOString().slice(0,10) : isoToday %>"></div>
+        <div class="col-sm-12 col-lg-4"><label class="form-label">Quittance (PDF ou photo) <span class="text-danger">*</span></label><input type="file" name="fichier_quittance" class="form-control form-control-sm" accept=".pdf,image/*" <%= (dossier.files || []).some(x => x.category === 'QUITTANCE_DOUANE') ? '' : 'required' %>></div>
+        <div class="col-12 small text-muted" data-f1-caisse hidden><i class="bi bi-info-circle me-1"></i>Payé par la société en espèces : la sortie (droits + frais bancaires) sera inscrite dans le journal de caisse.</div>
+        <div class="col-12 text-end"><button class="btn btn-success px-4"><i class="bi bi-check2-circle me-1"></i><%= facture1 ? 'Enregistrer le paiement et passer en traitement' : 'Émettre la facture 1, enregistrer le paiement et passer en traitement' %></button></div>
+      </form>
+      <script>
+        (function () {
+          var f = document.currentScript.previousElementSibling;
+          var n = function (v) { var x = parseFloat(String(v || '').replace(/[\s\u202f\u00a0]/g, '').replace(',', '.')); return isNaN(x) ? 0 : x; };
+          function upd() {
+            f.querySelector('[data-f1-total]').textContent = Math.round(n(f.querySelector('[data-f1-droits]').value) + n(f.querySelector('[data-f1-frais]').value)).toLocaleString('fr-FR').replace(/[\u202f\u00a0]/g, ' ');
+            var p = f.querySelector('[name=paye_par]:checked'), m = f.querySelector('[name=mode_paiement]:checked');
+            f.querySelector('[data-f1-caisse]').hidden = !(p && p.value === 'SOCIETE' && m && m.value === 'CAISSE');
+          }
+          f.addEventListener('input', upd); f.addEventListener('change', upd); upd();
+        })();
+      </script>
+    </div>
+  <% } else { %><%- waitMsg("En attente de la facture 1 et du paiement des droits à la banque (facturation, comptabilité).") %><% } %>
+
+<% } else if (["EN_TRAITEMENT", "BON_PROVISOIR", "BON_REEL"].includes(currentStatus)) { %>
+  <div id="bon-reel"></div>
+  <% if (bons.length) { %>
+    <div class="bon-strip mb-3">
+      <% bons.filter(b => b.etat !== 'REJETE').forEach(b => {
+           const req = VK.filter(([k]) => b['tick_' + k + '_by'] !== 'Non requis');
+           const done = req.filter(([k]) => b['tick_' + k]).length;
+           const st = b.etat === 'A_MODIFIER' ? ['À modifier par le demandeur', 'warn'] : b.etat === 'EN_ATTENTE' ? (b.ordre_paiement_by || done === req.length ? ['Prêt à payer', 'ok'] : [`Visas ${done}/${req.length}`, 'wait'])
+                    : !b.bon_reel ? ['Payé · à justifier', 'warn'] : !b.bon_reel.confirme_at ? ['Justifié · caisse à confirmer', 'info'] : ['Régularisé', 'done']; %>
+        <a href="/bons/<%= b.id %>" class="bon-chip <%= st[1] %>">
+          <span class="bc-n"><%= b.numero %><% if (b.urgent) { %><span class="badge-urgent ms-1"><i class="bi bi-lightning-charge-fill"></i>URGENT</span><% } %></span><span class="bc-m"><%= f(b.montant_demande) %> F</span><span class="bc-s"><%= st[0] %></span>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <% toJustify.forEach(bp => {
+       let items = []; try { items = bp.items_json ? JSON.parse(bp.items_json) : []; } catch (e) {}
+       if (!items.length) items = [{ designation: bp.objet, montant: bp.montant_demande }];
+       const mayJustify = terrain || bp.demandeur_id === user.id; %>
+    <% if (mayJustify) { %>
+      <div class="act-box mb-3">
+        <h6 class="fw-bold mb-1"><i class="bi bi-receipt-cutoff me-1"></i>Bon réel du <%= bp.numero %> · <%= f(bp.montant_demande) %> F avancés</h6>
+        <p class="text-xs text-muted mb-3">Les lignes du bon provisoire ne changent pas. Saisissez le montant réellement payé en face de chaque ligne, et ajoutez une ligne pour toute dépense imprévue.</p>
+        <%- include('../bons/_reel_form', { bp, items, action: '/bons/reel' }) %>
+      </div>
+    <% } else { %><%- waitMsg(`Bon ${bp.numero} payé : en attente du bon réel (justificatifs) par le service terrain.`) %><% } %>
+  <% }) %>
+
+  <% toConfirm.forEach(bp => { const br = bp.bon_reel; %>
+    <div class="act-box mb-3">
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <h6 class="fw-bold mb-0"><i class="bi bi-cash me-1"></i>Bon réel du <%= bp.numero %></h6>
+        <span class="ms-auto small fw-semibold <%= br.ecart > 0 ? 'text-success' : br.ecart < 0 ? 'text-danger' : '' %>"><%= br.ecart > 0 ? f(br.ecart) + ' F à rendre à la caisse' : br.ecart < 0 ? f(-br.ecart) + ' F de complément à payer' : 'Aucun écart' %></span>
+      </div>
+      <% if (isCaisse) { %>
+        <button onclick="workflowConfirmDecaissement(<%= br.id %>)" class="btn btn-primary btn-sm mt-2"><i class="bi bi-check-circle me-1"></i>Confirmer la régularisation en caisse</button>
+      <% } else { %><div class="small text-muted mt-1">La caisse confirmera la régularisation.</div><% } %>
+    </div>
+  <% }) %>
+
+  <% if (currentStatus === "BON_REEL" && !toJustify.length) { %>
+    <div class="act-box mb-3">
+      <h6 class="fw-bold mb-1"><i class="bi bi-flag me-1"></i>Pour passer en facturation</h6>
+      <% if (billingMissing.length) { %>
+        <p class="small mb-2">Il manque : <b><%= billingMissing.join(', ') %></b>.</p>
+        <a href="#camcis" class="btn btn-light btn-sm" onclick="var c=document.getElementById('fBae'); if (c) bootstrap.Collapse.getOrCreateInstance(c).show();"><i class="bi bi-unlock me-1"></i>Saisir le BAE (facultatif)</a>
+      <% } else { %>
+        <p class="small mb-2">Tout est prêt. Le bon à enlever (BAE) est facultatif : vous pouvez le saisir plus tard.</p>
+        <form action="/dossiers/<%= dossier.id %>/passer-facturation" method="POST" class="d-inline"><button class="btn btn-primary btn-sm"><i class="bi bi-arrow-right-circle me-1"></i>Passer en facturation</button></form>
+      <% } %>
+    </div>
+  <% } %>
+
+  <% if (pendingBons.length) { %>
+    <%- waitMsg(`${pendingBons.length} bon(s) en cours de visa. La caisse paiera dès que les visas requis (ou un ordre du PDG/DG) seront là.`) %>
+  <% } %>
+
+  <% if (terrain) { %>
+    <% if (currentStatus === "EN_TRAITEMENT") { %>
+      <div class="act-box">
+        <h6 class="fw-bold mb-2"><i class="bi bi-cash-stack me-1"></i>Demande d'avance (bon provisoire)</h6>
+        <%- include('_bp_form', { dossier }) %>
+      </div>
+    <% } else { %>
+      <button class="btn btn-light btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#bpExtra"><i class="bi bi-plus-lg me-1"></i>Bon provisoire complémentaire</button>
+      <div class="collapse" id="bpExtra"><div class="act-box mt-2"><%- include('_bp_form', { dossier }) %></div></div>
+    <% } %>
+  <% } else if (currentStatus === "EN_TRAITEMENT") { %>
+    <%- waitMsg("Opérations portuaires en cours. Le service acconage ou enlèvement émettra les bons provisoires. Pour une dépense de votre service, ouvrez « Bons de débours » et demandez un bon.") %>
+  <% } %>
+
+<% } else if (currentStatus === "FACTURATION") { %>
+  <% if (can("FACTURATION")) { %>
+    <div class="act-steps">
+      <div class="act-box <%= factureFinale ? 'done' : '' %>">
+        <div class="d-flex align-items-center gap-2 mb-2"><span class="act-n">1</span><h6 class="fw-bold mb-0">Facture finale (débours + honoraires)</h6>
+          <% if (factureFinale) { %><a href="/facturation/<%= factureFinale.id %>" class="ms-auto small fw-semibold"><i class="bi bi-check-circle-fill text-success me-1"></i><%= factureFinale.numero %> · <%= f(factureFinale.total_ttc) %> F</a><% } %></div>
+        <% if (!factureFinale) { %>
+          <%
+            // Toutes les dépenses justifiées du dossier (bons réels), cochées d'office : la facturation retire ce qui ne se facture pas
+            const lignesDebours = [];
+            bons.filter(b => b.bon_reel && b.bon_reel.montant_reel > 0).forEach(b => {
+              let its = []; try { its = JSON.parse(b.bon_reel.items_json || '[]'); } catch (e) {}
+              its = its.filter(it => Number(it.montant) > 0);
+              if (its.length) its.forEach(it => lignesDebours.push({ d: 'Débours : ' + (it.designation || b.objet), m: Number(it.montant), bon: b.numero }));
+              else lignesDebours.push({ d: 'Débours : ' + b.objet, m: b.bon_reel.montant_reel, bon: b.numero });
+            });
+          %>
+          <form action="/dossiers/<%= dossier.id %>/facture-auto" method="POST" class="row g-2 ops-form">
+            <div class="col-12">
+              <label class="form-label">Dépenses du dossier à facturer <span class="text-muted fw-normal">(décochez ce qui ne se facture pas, corrigez un montant si besoin)</span></label>
+              <% if (!lignesDebours.length) { %><div class="small text-muted">Aucun bon réel justifié sur ce dossier.</div><% } %>
+              <div class="fac-lines">
+                <% lignesDebours.forEach((l, i) => { %>
+                  <div class="d-flex align-items-center gap-2 mb-1 fac-line">
+                    <input class="form-check-input mt-0" type="checkbox" name="l_on" value="<%= i %>" checked aria-label="Facturer cette ligne">
+                    <input name="l_desc" class="form-control form-control-sm flex-grow-1" value="<%= l.d %>">
+                    <input name="l_mt" class="form-control form-control-sm text-end" style="max-width:9rem" inputmode="decimal" value="<%= Math.round(l.m) %>">
+                    <span class="small text-muted text-nowrap d-none d-md-inline"><%= l.bon %></span>
+                  </div>
+                <% }) %>
+              </div>
+              <input type="hidden" name="l_mode" value="1">
+            </div>
+            <div class="col-sm-6"><label class="form-label">Honoraires de transit (HT, FCFA)</label><input name="honoraires" inputmode="decimal" class="form-control form-control-sm" placeholder="ex. 150000"></div>
+            <div class="col-sm-6 d-flex align-items-end"><div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" name="tva_honoraires" value="1" id="tvaH" checked onchange="this.value=this.checked?'1':'0'"><label class="form-check-label small" for="tvaH">TVA 19,25 % sur honoraires</label></div></div>
+            <div class="col-12 d-flex flex-wrap gap-2 justify-content-end">
+              <a href="/documents/create?dossier_id=<%= dossier.id %>" class="btn btn-light btn-sm">Facture manuelle</a>
+              <button class="btn btn-primary btn-sm"><i class="bi bi-magic me-1"></i>Générer la facture</button>
+            </div>
+          </form>
+        <% } %>
+      </div>
+      <div class="act-box">
+        <div class="d-flex align-items-center gap-2 mb-2"><span class="act-n">2</span><h6 class="fw-bold mb-0">Envoi de la facture</h6></div>
+        <form action="/dossiers/<%= dossier.id %>/pipeline/facturer" method="POST" class="d-flex flex-wrap gap-2 align-items-center">
+          <span class="small text-muted flex-grow-1">La facture est envoyée au client : le dossier passe à la clôture comptable.</span>
+          <button type="submit" class="btn btn-success btn-sm px-3" <%= factureFinale ? '' : 'disabled' %>><i class="bi bi-lock-fill me-1"></i>Marquer facturé</button>
+        </form>
+      </div>
+    </div>
+  <% } else { %><%- waitMsg("En attente de la facture finale par le service facturation.") %><% } %>
+
+<% } else if (currentStatus === "CLOTURE") { %>
+  <% if (can("CLOTURE")) { %>
+    <div class="act-box d-sm-flex justify-content-between align-items-center gap-3">
+      <div>
+        <h6 class="fw-bold mb-1">Archivage définitif</h6>
+        <p class="text-xs text-muted mb-0">Vérifiez les règlements du client, puis archivez le dossier.<% if (finance.aRecouvrer > 0) { %> <b class="text-danger">Reste à encaisser : <%= f(finance.aRecouvrer) %> F.</b><% } %></p>
+      </div>
+      <form action="/dossiers/<%= dossier.id %>/pipeline/cloturer" method="POST" class="mt-2 mt-sm-0" onsubmit="return confirm('Archiver définitivement ce dossier ?')">
+        <button type="submit" class="btn btn-dark px-4"><i class="bi bi-archive-fill me-1"></i>Archiver</button>
+      </form>
+    </div>
+  <% } else { %><%- waitMsg("En attente de l'archivage par la comptabilité.") %><% } %>
+
+<% } else if (currentStatus === "ARCHIVE") { %>
+  <div class="act-box done d-flex align-items-center gap-2">
+    <i class="bi bi-archive-fill fs-5 text-success"></i>
+    <div><b>Dossier archivé</b><% if (dossier.archived_at) { %><div class="text-xs text-muted">Le <%= new Date(dossier.archived_at).toLocaleString('fr-FR') %></div><% } %></div>
+  </div>
+<% } %>

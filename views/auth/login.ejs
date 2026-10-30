@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>Connexion · YM-TRANSIT ERP</title>
+  <link rel="stylesheet" href="/vendor/instrument-sans/index.css">
+  <link rel="stylesheet" href="/vendor/inter/index.css">
+  <link rel="stylesheet" href="/vendor/bootstrap/css/bootstrap.min.css">
+  <link rel="stylesheet" href="/vendor/bootstrap-icons/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="/assets/css/app.css?v=38">
+  <link rel="stylesheet" href="/assets/css/clean.css?v=9">
+  <style>
+    body { background: #fff; }
+    .auth { min-height: 100vh; display: grid; grid-template-columns: 1.1fr 1fr; }
+    .auth-art {
+      position: relative; overflow: hidden; color: #fff;
+      display: flex; flex-direction: column; justify-content: space-between; padding: 2.5rem 3rem;
+      background: #0d1424 url('/assets/ym_transit.jpg') center / cover no-repeat;
+    }
+    .auth-art::before {
+      content: ""; position: absolute; inset: 0;
+      background:
+        radial-gradient(70% 60% at 0% 100%, rgba(16,185,129,.35), transparent 60%),
+        linear-gradient(160deg, rgba(6,40,30,.45) 0%, rgba(4,90,64,.78) 55%, rgba(6,30,24,.92) 100%);
+    }
+    .auth-art > * { position: relative; }
+    .auth-brand { display: flex; align-items: center; gap: .8rem; text-decoration: none; color: #fff; }
+    .auth-brand strong { font-size: 1.15rem; letter-spacing: -.01em; }
+    .auth-art h2 { color: #fff; font-size: clamp(1.8rem, 1.2rem + 1.6vw, 2.6rem); line-height: 1.15; max-width: 520px; margin-bottom: 1rem; }
+    .auth-art p.lead { color: rgba(255,255,255,.78); font-size: 1rem; max-width: 480px; }
+    .auth-feats { display: grid; gap: .8rem; margin-top: 2rem; max-width: 460px; }
+    .auth-feat { display: flex; gap: .85rem; align-items: center; padding: .8rem 1rem; border-radius: 14px;
+      background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.12); backdrop-filter: blur(8px); }
+    .auth-feat .fi { width: 38px; height: 38px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; color: #fff; }
+    .auth-feat b { display: block; font-size: .9rem; }
+    .auth-feat small { color: rgba(255,255,255,.7); font-size: .8rem; }
+    .auth-art .foot { font-size: .78rem; color: rgba(255,255,255,.55); }
+
+    .auth-form { display: flex; align-items: center; justify-content: center; padding: 2.5rem 1.5rem; background:
+      #fff; }
+    .auth-card { width: 100%; max-width: 400px; }
+    .auth-card h1 { font-size: 1.7rem; margin-bottom: .35rem; }
+    .auth-card .sub { color: var(--ink-500); margin-bottom: 2rem; }
+    .auth-card .form-control { height: 48px; padding-left: 2.75rem; border-radius: 12px; font-size: .95rem; }
+    .field { position: relative; }
+    .field > .bi { position: absolute; left: 1rem; top: 50%; transform: translateY(-50%); color: var(--ink-400); font-size: 1.05rem; }
+    .pw-toggle { position: absolute; right: .5rem; top: 50%; transform: translateY(-50%); border: 0; background: none; color: var(--ink-400); padding: .4rem .6rem; }
+    .btn-auth { height: 50px; border-radius: 12px; font-size: 1rem; font-weight: 650; }
+    .auth-help { font-size: .82rem; color: var(--ink-500); text-align: center; margin-top: 2rem; }
+    @media (max-width: 991.98px) {
+      .auth { grid-template-columns: 1fr; }
+      .auth-art { padding: 1.5rem; min-height: 0; }
+      .auth-art h2, .auth-art p.lead, .auth-feats, .auth-art .foot { display: none; }
+      .auth-form { align-items: flex-start; padding-top: 2rem; }
+    }
+  </style>
+</head>
+<body data-module="facturation">
+  <div class="auth">
+    <section class="auth-art">
+      <a href="/" class="auth-brand">
+        <span class="brand-mark">YM</span>
+        <span><strong>YM-TRANSIT</strong><br><small style="opacity:.7">Transit & Douane · Cameroun</small></span>
+      </a>
+
+      <div>
+        <h2>Pilotez tout votre transit depuis un seul espace.</h2>
+        <p class="lead">Dossiers, GUCE, bons de débours, facturation et comptabilité : toute l'équipe travaille sur les mêmes informations, en temps réel.</p>
+        <div class="auth-feats">
+          <div class="auth-feat"><span class="fi" style="background:#059669"><i class="bi bi-folder-fill"></i></span><span><b>Dossiers de transit</b><small>Suivi étape par étape, du GUCE à l'archive</small></span></div>
+          <div class="auth-feat"><span class="fi" style="background:#0d9488"><i class="bi bi-shield-check"></i></span><span><b>Circuit de visas sécurisé</b><small>5 visas de direction avant tout décaissement</small></span></div>
+          <div class="auth-feat"><span class="fi" style="background:#059669"><i class="bi bi-receipt-cutoff"></i></span><span><b>Facturation & encaissements</b><small>Factures, paiements et écritures comptables</small></span></div>
+        </div>
+      </div>
+
+      <div class="foot">&copy; <%= new Date().getFullYear() %> YM-TRANSIT · Douala · Kribi</div>
+    </section>
+
+    <section class="auth-form">
+      <div class="auth-card">
+        <h1>Connexion</h1>
+        <p class="sub">Accédez à votre espace de travail.</p>
+
+        <% if (typeof error_msg !== 'undefined' && error_msg && error_msg.length > 0) { %>
+          <div class="alert alert-danger d-flex gap-2 align-items-start mb-4" role="alert">
+            <i class="bi bi-exclamation-octagon-fill mt-1"></i><div><%= error_msg %></div>
+          </div>
+        <% } %>
+
+        <form action="/login" method="POST" id="loginForm" novalidate>
+          <div class="mb-3">
+            <label for="nom" class="form-label">Identifiant ou e-mail</label>
+            <div class="field">
+              <i class="bi bi-person"></i>
+              <input type="text" class="form-control" id="nom" name="nom" placeholder="ex. secretariat@ym-transit.cm" autocomplete="username" autocapitalize="none" required autofocus>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label for="password" class="form-label">Mot de passe</label>
+            <div class="field">
+              <i class="bi bi-lock"></i>
+              <input type="password" class="form-control" id="password" name="password" placeholder="Votre mot de passe" autocomplete="current-password" required>
+              <button type="button" class="pw-toggle" id="pwToggle" aria-label="Afficher le mot de passe"><i class="bi bi-eye"></i></button>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-auth w-100" id="loginBtn">
+            Se connecter <i class="bi bi-arrow-right ms-1"></i>
+          </button>
+        </form>
+
+        <p class="auth-help">
+          Mot de passe oublié ou compte bloqué ?<br>Contactez l'administrateur système YM-TRANSIT.
+        </p>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var t = document.getElementById('pwToggle'), pw = document.getElementById('password');
+      t.addEventListener('click', function () {
+        var show = pw.type === 'password';
+        pw.type = show ? 'text' : 'password';
+        t.innerHTML = '<i class="bi bi-eye' + (show ? '-slash' : '') + '"></i>';
+      });
+      document.getElementById('loginForm').addEventListener('submit', function () {
+        var b = document.getElementById('loginBtn');
+        b.disabled = true;
+        b.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connexion…';
+      });
+    })();
+  </script>
+</body>
+</html>

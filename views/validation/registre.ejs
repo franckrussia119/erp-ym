@@ -1,0 +1,63 @@
+<%- include('../partials/header') %>
+<%
+  const F = (n) => n == null ? '—' : Math.round(n).toLocaleString('fr-FR');
+  const dl = (d) => d ? new Date(d).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+  const CIRC = { VERT: ['Vert', 'cc-vert'], JAUNE: ['Jaune', 'cc-jaune'], ROUGE: ['Rouge', 'cc-rouge'] };
+  const qs = (over) => { const p = Object.assign({}, filtre, over); return '?' + Object.keys(p).filter(k => p[k]).map(k => k + '=' + encodeURIComponent(p[k])).join('&'); };
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-journal-check"></i></span>
+  <div class="flex-grow-1">
+    <h1>Registre des validations</h1>
+    <p class="mb-0">Chaque déclaration validée reçoit un numéro d'ordre (AAAA-MM-NNN) qui repart à 001 chaque mois.<% if (enAttente) { %> <a href="/dossiers?pipeline_status=VALIDATION"><%= enAttente %> dossier<%= enAttente > 1 ? 's' : '' %> en attente de validation</a>.<% } %></p>
+  </div>
+  <div class="ph-actions">
+    <a class="btn btn-light btn-sm" href="/codes-tarifaires"><i class="bi bi-book me-1"></i>Codes tarifaires</a>
+    <a class="btn btn-light btn-sm" href="/validation/registre/export<%= qs({}) %>"><i class="bi bi-filetype-csv me-1"></i>Exporter (Excel)</a>
+  </div>
+</div>
+
+<div class="reg-months mb-3">
+  <a class="<%= !filtre.mois ? 'on' : '' %>" href="<%= qs({ mois: '' }) %>"><b>Tous</b><span><%= mois.reduce((t, m) => t + m.n, 0) %></span></a>
+  <% mois.forEach(m => { %><a class="<%= filtre.mois === m.cle ? 'on' : '' %>" href="<%= qs({ mois: m.cle }) %>"><b class="text-capitalize-first"><%= m.label %></b><span><%= m.n %> dossier<%= m.n > 1 ? 's' : '' %></span></a><% }) %>
+</div>
+
+<form class="card card-body mb-4 d-flex flex-row flex-wrap align-items-end gap-2" method="GET">
+  <% if (filtre.mois) { %><input type="hidden" name="mois" value="<%= filtre.mois %>"><% } %>
+  <div><label class="form-label small mb-1">Recherche</label><input type="search" name="q" class="form-control form-control-sm" style="width: 15rem" placeholder="Dossier, BL, CAMCIS, GN, DAU, code…" value="<%= filtre.q || '' %>"></div>
+  <div><label class="form-label small mb-1">Du</label><input type="date" name="du" class="form-control form-control-sm" value="<%= filtre.du || '' %>"></div>
+  <div><label class="form-label small mb-1">Au</label><input type="date" name="au" class="form-control form-control-sm" value="<%= filtre.au || '' %>"></div>
+  <div><label class="form-label small mb-1">Client</label><select name="client" class="form-select form-select-sm"><option value="">Tous</option><% clients.forEach(c => { %><option value="<%= c.id %>" <%= String(filtre.client) === String(c.id) ? 'selected' : '' %>><%= c.nom %></option><% }) %></select></div>
+  <div><label class="form-label small mb-1">Circuit</label><select name="circuit" class="form-select form-select-sm"><option value="">Tous</option><% Object.keys(CIRC).forEach(k => { %><option value="<%= k %>" <%= filtre.circuit === k ? 'selected' : '' %>><%= CIRC[k][0] %></option><% }) %></select></div>
+  <div><label class="form-label small mb-1">Ordre</label><select name="ordre" class="form-select form-select-sm"><option value="desc">Plus récents d'abord</option><option value="asc" <%= filtre.ordre === 'asc' ? 'selected' : '' %>>Plus anciens d'abord</option></select></div>
+  <button class="btn btn-primary btn-sm"><i class="bi bi-funnel me-1"></i>Filtrer</button>
+  <% if (filtre.q || filtre.du || filtre.au || filtre.client || filtre.circuit) { %><a class="btn btn-link btn-sm" href="<%= filtre.mois ? '?mois=' + filtre.mois : '?' %>">Effacer les filtres</a><% } %>
+</form>
+
+<% if (!groupes.length) { %><div class="empty-state py-5"><div class="es-ico"><i class="bi bi-journal-check"></i></div><b>Aucune déclaration validée pour ces critères</b></div><% } %>
+<% groupes.forEach(g => { %>
+  <div class="card mb-4">
+    <div class="card-header d-flex align-items-center gap-2"><i class="bi bi-calendar3"></i><b class="text-capitalize-first"><%= g.label %></b><span class="badge text-bg-primary ms-auto"><%= g.rows.length %> dossier<%= g.rows.length > 1 ? 's' : '' %></span></div>
+    <div class="table-responsive">
+      <table class="table table-sm align-middle mb-0 reg-table">
+        <thead><tr><th>N° d'ordre</th><th>Validé le</th><th>Dossier</th><th>N° CAMCIS</th><th>N° GN</th><th>N° DAU</th><th>Codes tarifaires</th><th>Circuit</th><th class="text-end">Droits liquidés</th></tr></thead>
+        <tbody>
+          <% g.rows.forEach(r => { const c = CIRC[r.camcis_circuit]; %>
+            <tr>
+              <td><b class="font-monospace"><%= r.validation_ordre %></b></td>
+              <td class="text-nowrap"><%= dl(r.validation_at) %></td>
+              <td><a href="/dossiers/<%= r.id %>" class="fw-semibold"><%= r.client ? r.client.nom : r.numero %></a><small class="d-block text-muted">BL <%= r.bl || '—' %><%= r.contenu ? ' · ' + r.contenu : '' %></small></td>
+              <td class="font-monospace"><%= r.camcis_numero || '—' %></td>
+              <td class="font-monospace"><%= r.gn_numero || '—' %></td>
+              <td class="font-monospace"><%= r.dau_numero || '—' %></td>
+              <td><% if (!r.articles.length) { %><span class="text-muted">—</span><% } %><% r.articles.forEach(a => { %><span class="reg-code" title="<%= a.designation %>"><%= a.code || '?' %></span><% }) %></td>
+              <td><% if (c) { %><span class="circuit-chip <%= c[1] %>"><span class="cdot"></span><%= c[0] %></span><% } else { %>—<% } %></td>
+              <td class="text-end text-nowrap"><%= F(r.camcis_liquidation) %><%= r.camcis_liquidation != null ? ' F' : '' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<% }) %>
+<%- include('../partials/footer') %>

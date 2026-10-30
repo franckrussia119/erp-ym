@@ -1,0 +1,45 @@
+<%- include('../partials/header') %>
+<%
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const liste = onglet === 'personnel' ? personnel : representants;
+  const actifs = liste.filter(x => x.n || x.aJustifier).length;
+%>
+<div class="page-head">
+  <span class="ph-ico"><i class="bi bi-person-lines-fill"></i></span>
+  <div class="flex-grow-1 min-w-0">
+    <h1>Comptes</h1>
+    <p class="mb-0">Chaque représentant et chaque employé a son compte. Ce que la caisse lui donne est un moins ; ce qu'il verse, rend ou justifie est un plus.</p>
+  </div>
+  <a href="/caisse" class="btn btn-light"><i class="bi bi-safe2 me-1"></i>Caisse</a>
+</div>
+
+<div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+  <div class="acc-tabs">
+    <a href="/comptes?onglet=representants<%= q ? '&q=' + encodeURIComponent(q) : '' %>" class="btn btn-sm <%= onglet === 'representants' ? 'btn-primary' : 'btn-light' %>"><i class="bi bi-person-badge me-1"></i>Représentants <span class="badge bg-white text-dark ms-1"><%= representants.length %></span></a>
+    <a href="/comptes?onglet=personnel<%= q ? '&q=' + encodeURIComponent(q) : '' %>" class="btn btn-sm <%= onglet === 'personnel' ? 'btn-primary' : 'btn-light' %>"><i class="bi bi-people me-1"></i>Personnel <span class="badge bg-white text-dark ms-1"><%= personnel.length %></span></a>
+  </div>
+  <form class="ms-auto d-flex gap-2" method="GET" action="/comptes">
+    <input type="hidden" name="onglet" value="<%= onglet %>">
+    <input type="search" name="q" value="<%= q %>" class="form-control form-control-sm" placeholder="Rechercher un nom" style="min-width: 14rem">
+  </form>
+</div>
+
+<% if (!liste.length) { %>
+  <div class="card"><div class="card-body text-center text-muted py-5">Aucun compte<%= q ? ' pour « ' + q + ' »' : '' %>.</div></div>
+<% } else { %>
+  <p class="small text-muted mb-2"><%= actifs %> compte(s) avec des mouvements. Ouvrez un compte pour voir son relevé.</p>
+  <div class="acc-grid">
+    <% liste.slice().sort((a, b) => (b.n + (b.aJustifier ? 1 : 0)) - (a.n + (a.aJustifier ? 1 : 0))).forEach(x => { const nom = [x.prenom, x.nom].filter(Boolean).join(' '); %>
+      <a class="acc-card <%= x.n || x.aJustifier ? '' : 'idle' %>" href="/comptes/<%= onglet === 'personnel' ? 'personnel' : 'representant' %>/<%= x.id %>">
+        <div class="acc-name"><%= nom %></div>
+        <div class="acc-sub"><%= onglet === 'personnel' ? x.role : (x.clients.join(', ') || 'Aucun client') %></div>
+        <div class="acc-nums">
+          <div><span>Solde</span><b class="<%= x.verse - x.recu < 0 ? 'out' : 'in' %>"><%= x.verse - x.recu > 0 ? '+' : '' %><%= f(x.verse - x.recu) %> F</b></div>
+          <div><span>Donné par la caisse</span><b><%= f(x.recu) %> F</b></div>
+          <% if (onglet === 'personnel') { %><div><span>Bons à justifier</span><b><%= f(x.aJustifier) %> F</b></div><% } else { %><div><span>Mouvements</span><b><%= x.n %></b></div><% } %>
+        </div>
+      </a>
+    <% }) %>
+  </div>
+<% } %>
+<%- include('../partials/footer') %>

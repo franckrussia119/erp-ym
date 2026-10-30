@@ -1,0 +1,6 @@
+<%# Navigation commune des pages Ressources humaines %>
+<nav class="rh-tabs" aria-label="Ressources humaines">
+  <% [['accueil', '/rh', 'bi-grid-1x2', "Vue d'ensemble"], ['employes', '/rh/employes', 'bi-people', 'Employés'], ['paie', '/rh/paie', 'bi-cash-stack', 'Paie'], ['conges', '/demandes?vue=toutes&type=CONGE', 'bi-calendar2-week', 'Congés'], ['bareme', '/rh/bareme', 'bi-sliders', 'Barème'], ['services', '/admin/services', 'bi-diagram-3', 'Services']].forEach(([k, h, i, l]) => { %>
+    <a href="<%= h %>" class="<%= typeof rhTab !== 'undefined' && rhTab === k ? 'on' : '' %>"><i class="bi <%= i %>"></i><span><%= l %></span></a>
+  <% }) %>
+</nav>

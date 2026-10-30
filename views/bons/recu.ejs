@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reçu <%= numero %></title>
+<%
+  const f = (n) => Math.round(n || 0).toLocaleString('fr-FR');
+  const nom = (u) => u ? ((u.prenom || '') + ' ' + u.nom).trim() : '—';
+  const modeL = { ESPECES: 'Espèces', CHEQUE: 'Chèque', VIREMENT: 'Virement', MOBILE_MONEY: 'Mobile money' };
+  const mv = bon.mouvements[0];
+  const paye = bon.paye_at || bon.approved_at || bon.created_at;
+  const lettres = enLettres(bon.montant_demande);
+  const back = '/bons/' + bon.id;
+%>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #eef1f5; font: 13px/1.45 "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; color: #0f172a; }
+  .bar { max-width: 820px; margin: 16px auto; padding: 0 16px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .bar a, .bar button { font: inherit; border: 1px solid #cbd5e1; background: #fff; color: #0f172a; border-radius: 8px; padding: 7px 12px; text-decoration: none; cursor: pointer; }
+  .bar .primary { background: #0f5132; border-color: #0f5132; color: #fff; }
+  .panel { max-width: 820px; margin: 0 auto 16px; padding: 14px 16px; background: #fff; border: 1px solid #dbe2ea; border-radius: 12px; }
+  .panel h2 { margin: 0 0 4px; font-size: 15px; }
+  .panel p { margin: 0 0 10px; color: #475569; }
+  .panel form { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .panel input[type=text] { font: inherit; padding: 7px 10px; border: 1px solid #cbd5e1; border-radius: 8px; min-width: 200px; }
+  .ok { color: #0f5132; font-weight: 600; }
+  .err { color: #b42318; font-weight: 600; margin-bottom: 8px; }
+  .sheet { max-width: 820px; margin: 0 auto 24px; background: #fff; box-shadow: 0 1px 3px rgba(15,23,42,.12); }
+  .copy { padding: 22px 28px; position: relative; }
+  .copy + .copy { border-top: 1.5px dashed #94a3b8; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; }
+  .soc b { font-size: 17px; letter-spacing: .5px; }
+  .soc small { display: block; color: #475569; font-size: 11px; }
+  .num { text-align: right; }
+  .num .t { font-size: 16px; font-weight: 800; letter-spacing: .5px; }
+  .num .n { font-size: 15px; font-weight: 700; color: #0f5132; }
+  .num small { display: block; color: #475569; font-size: 11px; }
+  .tag { position: absolute; right: 28px; bottom: 10px; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #64748b; }
+  table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+  td { padding: 5px 0; vertical-align: top; border-bottom: 1px dotted #cbd5e1; }
+  td.k { width: 34%; color: #475569; }
+  .amount { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; padding: 8px 12px; border: 1.5px solid #0f172a; border-radius: 6px; }
+  .amount b { font-size: 20px; white-space: nowrap; }
+  .amount span { font-style: italic; }
+  .sign { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 14px; }
+  .sign div { border: 1px solid #94a3b8; border-radius: 6px; height: 78px; padding: 6px 8px; font-size: 11px; color: #475569; }
+  @media print {
+    @page { size: A4; margin: 10mm; }
+    body { background: #fff; }
+    .bar, .panel { display: none !important; }
+    .sheet { box-shadow: none; max-width: none; margin: 0; }
+    .copy { height: 136mm; overflow: hidden; }
+  }
+</style>
+</head>
+<body>
+<div class="bar">
+  <a href="<%= back %>">← Retour au bon</a>
+  <a href="/caisse/bons-payes">Bons payés</a>
+  <button class="primary" onclick="window.print()">Imprimer le reçu</button>
+</div>
+
+<div class="panel">
+  <h2>Reçu papier signé</h2>
+  <% if (erreur) { %><div class="err"><%= erreur %></div><% } %>
+  <% if (bon.recu_papier || bon.recu_scan) { %>
+    <p class="ok">✓ <%= bon.recu_papier ? 'N° ' + bon.recu_papier : 'Photo jointe' %><%= bon.recu_saisi_par ? ' · saisi par ' + bon.recu_saisi_par : '' %><%= bon.recu_saisi_at ? ' le ' + new Date(bon.recu_saisi_at).toLocaleDateString('fr-FR') : '' %>
+      <% if (bon.recu_scan) { %> · <a href="/bons/<%= bon.id %>/recu/scan" target="_blank">voir la photo</a><% } %></p>
+  <% } else { %>
+    <p>Le bénéficiaire signe le reçu. La caisse saisit ensuite le n° du reçu papier signé<%= canWrite ? '' : ' (pas encore fait)' %>.</p>
+  <% } %>
+  <% if (canWrite) { %>
+    <form method="POST" action="/bons/<%= bon.id %>/recu" enctype="multipart/form-data">
+      <input type="text" name="recu_papier" value="<%= bon.recu_papier || '' %>" placeholder="N° du reçu papier signé" maxlength="60">
+      <label>Photo (facultatif) <input type="file" name="recu_scan" accept="image/*,.pdf" capture="environment"></label>
+      <button class="primary" type="submit"><%= bon.recu_papier ? 'Modifier' : 'Enregistrer' %></button>
+    </form>
+  <% } %>
+</div>
+
+<div class="sheet">
+<% ['Exemplaire bénéficiaire', 'Souche caisse'].forEach(function (ex) { %>
+  <section class="copy">
+    <div class="head">
+      <div class="soc"><b>YM-TRANSIT</b><small>Rue de la Marine, Akwa, Douala, Cameroun</small><small>Tél. +237 233 45 67 89 · contact@ym-transit.cm</small></div>
+      <div class="num"><div class="t">REÇU DE CAISSE</div><div class="n">N° <%= numero %></div><small>Payé le <%= new Date(paye).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) %></small></div>
+    </div>
+    <div class="amount"><span>Je soussigné(e) reconnais avoir reçu de la caisse de YM-TRANSIT la somme de <b style="font-size:inherit"><%= lettres %> francs CFA</b>.</span><b><%= f(bon.montant_demande) %> F</b></div>
+    <table>
+      <tr><td class="k">Bénéficiaire</td><td><b><%= nom(bon.demandeur) %></b> · <%= bon.service %></td></tr>
+      <tr><td class="k">Motif</td><td><%= bon.objet %></td></tr>
+      <tr><td class="k">Bon</td><td><%= bon.numero %> · <%= origine ? origine.label : '' %><%= sousCat ? ' · ' + sousCat : '' %></td></tr>
+      <% if (bon.dossier) { %><tr><td class="k">Dossier</td><td><%= bon.dossier.numero_ordre ? 'N° ' + bon.dossier.numero_ordre + ' · ' : '' %><%= bon.dossier.numero %><%= bon.dossier.client ? ' · ' + bon.dossier.client.nom : '' %></td></tr><% } %>
+      <tr><td class="k">Mode de paiement</td><td><%= mv ? (modeL[mv.mode] || mv.mode) : 'Espèces' %><%= mv && mv.reference ? ' · réf. ' + mv.reference : '' %></td></tr>
+      <tr><td class="k">Caissier</td><td><%= bon.paye_par || '—' %></td></tr>
+      <tr><td class="k">N° reçu papier</td><td><%= bon.recu_papier || '……………………………' %></td></tr>
+    </table>
+    <div class="sign"><div>Signature du bénéficiaire<br><small>Nom et date</small></div><div>Signature du caissier</div></div>
+    <span class="tag"><%= ex %></span>
+  </section>
+<% }) %>
+</div>
+<% if (print) { %><script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 250); });</script><% } %>
+</body>
+</html>
